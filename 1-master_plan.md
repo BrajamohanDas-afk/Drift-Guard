@@ -32,13 +32,15 @@ No one notices until a 3am incident when the runbook is wrong. **Runbook Drift R
 
 ## Product Goals
 
-1. **Ingest** runbooks from any source (Markdown, Confluence, Notion, Git)
-2. **Connect** to live infra metadata (GitHub, Kubernetes, AWS, PagerDuty, Jira, CI/CD)
-3. **Extract** structured entities from docs (services, owners, URLs, commands, env vars, IAM roles)
+1. **Ingest** runbooks from Git and direct Markdown upload in the MVP
+2. **Connect** to live metadata from GitHub, Kubernetes, PagerDuty, and HTTP-accessible endpoints in the MVP
+3. **Extract** structured entities from docs (services, owners, dashboard URLs, commands, env vars, IAM roles, clusters)
 4. **Detect** drift between doc entities and live system state
 5. **Score** each runbook with a reliability confidence rating
 6. **Alert** teams via Slack, email, or webhook
 7. **Expose** a REST API for integration into existing tooling
+
+Post-MVP expansion adds Confluence, Notion, AWS, Jira, and CI/CD-specific integrations.
 
 ---
 
@@ -84,7 +86,7 @@ No one notices until a 3am incident when the runbook is wrong. **Runbook Drift R
 | `ingestion-service` | Pull and parse docs from all sources |
 | `entity-extraction-service` | Extract structured entities from raw doc text |
 | `drift-rules-engine` | Compare entities vs live infra state |
-| `evidence-store` | Persist raw evidence from live systems |
+| `evidence-store` | Maintain a per-audit in-memory cache for evidence lookups and serialize the evidence snapshot attached to alerts |
 | `alerting-service` | Deliver alerts via Slack / email / webhook |
 | `scoring-service` | Compute per-runbook reliability confidence scores |
 | `REST API` | Expose findings, scores, and triggers externally |
@@ -101,7 +103,7 @@ No one notices until a 3am incident when the runbook is wrong. **Runbook Drift R
 
 ### Phase 2 — Intelligence (Weeks 4–6)
 - Drift rules engine (5 core rule types)
-- Evidence store from GitHub + one infra source
+- Evidence collectors from GitHub + Kubernetes + PagerDuty + HTTP probe
 - Reliability scoring algorithm
 - Nightly scan job (Celery/Arq)
 
@@ -113,7 +115,7 @@ No one notices until a 3am incident when the runbook is wrong. **Runbook Drift R
 
 ### Phase 4 — Expansion (Post-MVP)
 - Confluence + Notion ingestion
-- Kubernetes + AWS + PagerDuty connectors
+- AWS, Jira, and CI/CD connectors
 - pgvector semantic search
 - Dashboard UI (optional)
 - Multi-tenant support
@@ -124,5 +126,5 @@ No one notices until a 3am incident when the runbook is wrong. **Runbook Drift R
 
 - MVP is backend-only — no frontend required
 - Authentication handled via API keys (simple, ship fast)
-- Drift rules are configurable per workspace
+- Drift rules are configurable per workspace in a later multi-tenant phase; MVP uses application-level configuration
 - All integrations are read-only (no writes to connected systems)

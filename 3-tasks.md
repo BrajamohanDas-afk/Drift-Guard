@@ -1,6 +1,8 @@
 # Runbook Drift Radar — Tasks
 
 > Ordered by phase. Each task is atomic and independently shippable. Check off as you go.
+>
+> Current repo status as of 2026-03-12: planning documents exist, but no application scaffold or implementation files are present yet. Leave implementation tasks unchecked until corresponding code, config, tests, or project files exist in the repository.
 
 ---
 
@@ -39,7 +41,7 @@
 - [ ] **T-022** Implement `document_version` creation on every new content hash
 - [ ] **T-023** Implement `GET /v1/documents` — list all documents (paginated)
 - [ ] **T-024** Implement `GET /v1/documents/{id}` — get single document with latest version
-- [ ] **T-025** Implement `DELETE /v1/documents/{id}` — soft delete
+- [ ] **T-025** Implement `DELETE /v1/documents/{id}` — soft delete/archive only, preserving versions and audit history
 - [ ] **T-026** Implement Markdown ingestor (`services/ingestion/markdown_ingestor.py`) — strip syntax, extract plain text
 - [ ] **T-027** Implement Git ingestor — connect to repo, walk path, pull `.md` files
 - [ ] **T-028** Implement `POST /v1/sources` — create source record
@@ -52,14 +54,17 @@
 ## Phase 3 — Entity Extraction
 
 - [ ] **T-040** Implement URL entity extractor (regex, capture all `http/https` URLs from doc text)
+- [ ] **T-040A** Implement dashboard extractor (identify Grafana/Datadog-style dashboard references and persist as `dashboard` entities)
 - [ ] **T-041** Implement service name extractor (regex patterns: `kebab-case`, known suffixes like `-api`, `-service`)
 - [ ] **T-042** Implement owner extractor (`@username`, `team-name` patterns)
 - [ ] **T-043** Implement command extractor (code blocks, `kubectl`, `helm`, `bash` commands)
 - [ ] **T-044** Implement env var extractor (`ALL_CAPS_WITH_UNDERSCORES` pattern)
 - [ ] **T-045** Implement IAM role extractor (`arn:aws:iam::` pattern)
 - [ ] **T-046** Implement Helm chart extractor (`chart@version` pattern)
+- [ ] **T-046A** Implement cluster extractor (`prod-us-east-1`, `staging-eu-west-1`, named kube contexts)
 - [ ] **T-047** Wire all extractors into unified `EntityExtractor` service
 - [ ] **T-048** Persist extracted entities to `entities` table (deduplicate per document)
+- [ ] **T-048A** Persist `document_version_id` on every entity row and scope deduplication to a single document version
 - [ ] **T-049** Trigger entity extraction automatically after document ingest
 - [ ] **T-050** Write unit tests for each extractor with positive + negative cases
 
@@ -74,7 +79,8 @@
 - [ ] **T-061** Implement HTTP probe collector: check URL, return status code + response time
 - [ ] **T-062** Implement PagerDuty collector: list services + escalation policy owners
 - [ ] **T-063** Implement Kubernetes collector (basic): list deployments + namespaces across contexts
-- [ ] **T-064** Implement `EvidenceStore` — in-memory cache per audit job run to avoid duplicate API calls
+- [ ] **T-064** Implement `EvidenceStore` — per-audit cache for external lookups and normalized evidence snapshots persisted on alerts
+- [ ] **T-064A** Define `EvidenceStore` boundary for MVP — request/audit-scoped in-memory cache that is serialized into `alerts.evidence` on alert creation; no standalone persistence table
 - [ ] **T-065** Write unit tests for each collector with mocked HTTP responses
 
 ---
@@ -116,8 +122,8 @@
 - [ ] **T-102** Implement `ingest_task` — async wrapper for source sync
 - [ ] **T-103** Implement `score_task` — async scorer trigger
 - [ ] **T-104** Configure nightly cron schedule (02:00 UTC)
-- [ ] **T-105** Implement `AuditJob` lifecycle: create → running → complete/failed
-- [ ] **T-106** Implement `POST /v1/audit/run` — trigger manual full audit, return `202`
+- [ ] **T-105** Implement `AuditJob` lifecycle: `pending` → `running` → `complete` / `partial` / `failed`
+- [ ] **T-106** Implement `POST /v1/audit/run` — trigger manual full audit or targeted audit by `document_id`, return `202`
 - [ ] **T-107** Implement `GET /v1/audit/jobs` — list audit job history
 - [ ] **T-108** Implement `GET /v1/audit/jobs/{id}` — poll single job status
 - [ ] **T-109** Implement `GET /v1/audit/report` — latest audit summary JSON
@@ -156,6 +162,8 @@
 - [ ] **B-001** Confluence ingestor (OAuth + export API)
 - [ ] **B-002** Notion ingestor (Notion API)
 - [ ] **B-003** AWS IAM role existence checker
+- [ ] **B-003A** Jira collector for ownership and incident/workflow evidence
+- [ ] **B-003B** CI/CD collector for deployed artifact and pipeline evidence
 - [ ] **B-004** pgvector integration for semantic doc search
 - [ ] **B-005** Multi-workspace / multi-tenant support
 - [ ] **B-006** GitHub Actions native action (publish to Marketplace)
@@ -163,6 +171,7 @@
 - [ ] **B-008** Custom drift rule builder (config-driven, no code)
 - [ ] **B-009** "Doc freshness" trend charts per service over time
 - [ ] **B-010** Runbook template generator (creates compliant doc scaffolds)
+- [ ] **B-011** Weekly digest schedules as a first-class feature (`notification_schedules` table plus API or config-management endpoint)
 
 ---
 

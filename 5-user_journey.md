@@ -43,25 +43,42 @@ POST /v1/sources
     "path_filter": "docs/runbooks/"
   }
 }
-→ 201 Created { "id": "src-001" }
+→ 201 Created
+{
+  "data": { "id": "src-001" }
+}
 ```
 
 **3. Trigger initial sync**
 ```http
 POST /v1/sources/src-001/sync
-→ 202 Accepted { "audit_job_id": "job-001" }
+→ 202 Accepted
+{
+  "data": { "audit_job_id": "job-001" }
+}
 ```
 
 **4. Poll for job completion**
 ```http
 GET /v1/audit/jobs/job-001
-→ { "status": "complete", "docs_scanned": 14, "alerts_created": 7 }
+→ {
+    "data": {
+      "status": "complete",
+      "docs_scanned": 14,
+      "alerts_created": 7
+    }
+  }
 ```
 
 **5. Review first findings**
 ```http
 GET /v1/alerts?severity=critical
-→ List of critical drift alerts with evidence
+→ {
+    "data": [
+      { "rule_type": "owner_missing", "severity": "critical", "message": "..." }
+    ],
+    "meta": { "total": 1, "page": 1, "per_page": 20 }
+  }
 ```
 
 **Outcome:** Sam sees 14 runbooks scanned, 7 drift alerts surfaced. Shares findings with Alex.
@@ -77,25 +94,30 @@ GET /v1/alerts?severity=critical
 **1. List all documents with scores**
 ```http
 GET /v1/scores
-→ [
-    { "document_id": "doc-042", "title": "payments-api-recovery.md", "score": 38, "band": "Critical" },
-    { "document_id": "doc-017", "title": "auth-service-runbook.md", "score": 91, "band": "Healthy" },
-    ...
-  ]
+→ {
+    "data": [
+      { "document_id": "doc-042", "title": "payments-api-recovery.md", "score": 38, "band": "Critical" },
+      { "document_id": "doc-017", "title": "auth-service-runbook.md", "score": 91, "band": "Healthy" }
+    ],
+    "meta": { "total": 14, "page": 1, "per_page": 20 }
+  }
 ```
 
 **2. Inspect the low-scoring runbook**
 ```http
 GET /v1/scores/doc-042
 → {
-    "score": 38,
-    "breakdown": {
-      "critical_alerts": 2,
-      "warning_alerts": 3,
-      "deductions": {
-        "critical": -40,
-        "warning": -16,
-        "stale_doc": -10
+    "data": {
+      "score": 38,
+      "band": "Critical",
+      "breakdown": {
+        "critical_alerts": 2,
+        "warning_alerts": 3,
+        "deductions": {
+          "critical": -40,
+          "warning": -16,
+          "stale_doc": -10
+        }
       }
     }
   }
@@ -104,26 +126,29 @@ GET /v1/scores/doc-042
 **3. Pull the alerts for that document**
 ```http
 GET /v1/alerts?document_id=doc-042
-→ [
-    {
-      "rule_type": "owner_missing",
-      "severity": "critical",
-      "message": "Owner '@dave' not found in CODEOWNERS or PagerDuty",
-      "evidence": { "searched_in": ["github_codeowners", "pagerduty"], "result": "not_found" }
-    },
-    {
-      "rule_type": "dashboard_dead",
-      "severity": "critical",
-      "message": "Dashboard URL returned 404",
-      "evidence": { "url": "https://grafana.internal/d/old-payments", "status_code": 404 }
-    },
-    {
-      "rule_type": "command_deprecated",
-      "severity": "warning",
-      "message": "Script referenced in runbook no longer exists in repo",
-      "evidence": { "command": "scripts/rollback-v1.sh", "checked_at_commit": "a3f9c2d" }
-    }
-  ]
+→ {
+    "data": [
+      {
+        "rule_type": "owner_missing",
+        "severity": "critical",
+        "message": "Owner '@dave' not found in CODEOWNERS or PagerDuty",
+        "evidence": { "searched_in": ["github_codeowners", "pagerduty"], "result": "not_found" }
+      },
+      {
+        "rule_type": "dashboard_dead",
+        "severity": "critical",
+        "message": "Dashboard URL returned 404",
+        "evidence": { "url": "https://grafana.internal/d/old-payments", "status_code": 404 }
+      },
+      {
+        "rule_type": "command_deprecated",
+        "severity": "warning",
+        "message": "Script referenced in runbook no longer exists in repo",
+        "evidence": { "command": "scripts/rollback-v1.sh", "checked_at_commit": "a3f9c2d" }
+      }
+    ],
+    "meta": { "total": 3, "page": 1, "per_page": 20 }
+  }
 ```
 
 **4. Alex fixes the runbook, pushes to Git**
@@ -132,13 +157,16 @@ GET /v1/alerts?document_id=doc-042
 ```http
 POST /v1/audit/run
 → 202 Accepted
+{
+  "data": { "audit_job_id": "job-002" }
+}
 ```
 
 **6. Resolves fixed alerts and watches score improve**
 ```http
 PATCH /v1/alerts/alert-007/resolve
 GET /v1/scores/doc-042
-→ { "score": 79, "band": "Degraded" }
+→ { "data": { "score": 79, "band": "Degraded" } }
 ```
 
 **Outcome:** Alex has a clear action list, fixes two issues, and sees the score recover.
@@ -149,9 +177,11 @@ GET /v1/scores/doc-042
 
 **Goal:** Get a summary of all runbook health across the payments team's services, every Monday.
 
+> Post-MVP note: scheduled weekly digests are a future capability. MVP supports end-of-audit notifications from application-level configuration, but not per-team digest scheduling through the API.
+
 ### Steps
 
-**1. Jordan sets up a scheduled webhook (via config)**
+**1. Jordan sets up a scheduled webhook (post-MVP, via config or a future scheduling API)**
 ```yaml
 # drift-radar config
 alerts:
@@ -169,9 +199,10 @@ alerts:
 ```
 📊 Weekly Runbook Health — Payments Team
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ Healthy (≥80):     6 runbooks
-⚠️  Degraded (60–79): 3 runbooks
-🔴 Critical (<60):    2 runbooks
+✅ Healthy (≥80):        6 runbooks
+⚠️  Degraded (60–79):    3 runbooks
+🟠 Unreliable (40–59):  1 runbook
+🔴 Critical (<40):      1 runbook
 
 New alerts this week: 4
 Resolved alerts:      2
@@ -205,24 +236,24 @@ GET /v1/audit/report?team=payments&format=json
 POST /v1/documents/upload
 Content-Type: multipart/form-data
 file: payments-api-recovery.md
-→ { "document_id": "doc-preview-123" }
+→ { "data": { "document_id": "doc-preview-123" } }
 ```
 
 **3. CI triggers a scan on just that document**
 ```http
 POST /v1/audit/run?document_id=doc-preview-123
-→ 202 Accepted { "audit_job_id": "job-preview-007" }
+→ 202 Accepted { "data": { "audit_job_id": "job-preview-007" } }
 ```
 
 **4. CI polls until complete, then checks score**
 ```http
 GET /v1/scores/doc-preview-123
-→ { "score": 42, "band": "Critical" }
+→ { "data": { "score": 42, "band": "Unreliable" } }
 ```
 
 **5. If score < 60, CI fails the PR with a comment:**
 ```
-❌ Runbook reliability score: 42/100 (Critical)
+❌ Runbook reliability score: 42/100 (Unreliable)
 Issues found:
   - Owner '@dave' not found in PagerDuty
   - Dashboard URL returns 404
@@ -263,7 +294,13 @@ Fix these before merging.
 **4. Alert appears in Monday digest to Jordan and in the API:**
 ```http
 GET /v1/audit/service/fraud-detection-v2
-→ { "runbooks": [], "alerts": [{ "type": "dependency_undocumented" }], "score": null }
+→ {
+    "data": {
+      "runbooks": [],
+      "alerts": [{ "type": "dependency_undocumented" }],
+      "score": null
+    }
+  }
 ```
 
 **Outcome:** Team is alerted that a production service is undocumented — before an incident forces someone to figure it out under pressure.
@@ -275,8 +312,8 @@ GET /v1/audit/service/fraud-detection-v2
 | Situation | System Behavior |
 |---|---|
 | GitHub API rate-limited during scan | Pause, retry with backoff, continue with other rules |
-| Dashboard URL times out | Recorded as `inconclusive`, not a failed alert |
+| Dashboard URL times out | Probe result recorded in evidence; no alert created unless retry policy confirms persistent failure |
 | Doc has no extractable entities | Score penalized, `info` alert raised |
 | Source sync fails mid-way | Partial results saved, `audit_job.status = partial` |
-| Same alert would be created twice | Deduplicated — existing unresolved alert updated |
+| Same alert would be created twice | Deduplicated — no new alert created while the unresolved alert already exists |
 | Manual scan triggered while nightly running | Queued, runs after current job completes |

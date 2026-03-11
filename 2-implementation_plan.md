@@ -31,11 +31,12 @@ runbook-drift-radar/
 │   │   ├── ingestion/
 │   │   │   ├── markdown_ingestor.py
 │   │   │   ├── git_ingestor.py
-│   │   │   ├── confluence_ingestor.py
-│   │   │   └── notion_ingestor.py
+│   │   │   ├── confluence_ingestor.py      # future expansion
+│   │   │   └── notion_ingestor.py          # future expansion
 │   │   ├── extraction/
 │   │   │   ├── entity_extractor.py
 │   │   │   ├── url_checker.py
+│   │   │   ├── dashboard_matcher.py
 │   │   │   └── command_parser.py
 │   │   ├── drift/
 │   │   │   ├── rules_engine.py
@@ -48,7 +49,7 @@ runbook-drift-radar/
 │   │   ├── evidence/
 │   │   │   ├── github_collector.py
 │   │   │   ├── kubernetes_collector.py
-│   │   │   ├── aws_collector.py
+│   │   │   ├── aws_collector.py            # future expansion
 │   │   │   └── pagerduty_collector.py
 │   │   ├── scoring/
 │   │   │   └── scorer.py
@@ -97,8 +98,9 @@ CREATE TABLE documents (
   title TEXT NOT NULL,
   doc_type TEXT,                -- 'runbook', 'sop', 'onboarding', 'recovery'
   service_name TEXT,
-  raw_content TEXT NOT NULL,
-  content_hash TEXT,
+  is_deleted BOOLEAN NOT NULL DEFAULT false,
+  deleted_at TIMESTAMPTZ,
+  latest_version_id UUID,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -109,7 +111,8 @@ CREATE TABLE documents (
 CREATE TABLE document_versions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   document_id UUID REFERENCES documents(id),
-  content TEXT NOT NULL,
+  raw_content TEXT NOT NULL,
+  normalized_content TEXT NOT NULL,
   content_hash TEXT NOT NULL,
   version_number INT NOT NULL,
   captured_at TIMESTAMPTZ DEFAULT now()
@@ -121,12 +124,15 @@ CREATE TABLE document_versions (
 CREATE TABLE entities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   document_id UUID REFERENCES documents(id),
-  entity_type TEXT NOT NULL,    -- 'service', 'owner', 'url', 'command', 'env_var', 'iam_role', 'helm_chart'
+  document_version_id UUID NOT NULL REFERENCES document_versions(id),
+  entity_type TEXT NOT NULL,    -- 'service', 'owner', 'url', 'dashboard', 'command', 'env_var', 'iam_role', 'helm_chart', 'cluster'
   value TEXT NOT NULL,
   context TEXT,                 -- surrounding text snippet
   extracted_at TIMESTAMPTZ DEFAULT now()
 );
 ```
+
+`document_id` supports document-level queries, while `document_version_id` is the authoritative link to the exact content snapshot that produced the entity. This matters for rescans and CI/CD preview documents.
 
 ### `runbook_scores`
 ```sql
@@ -183,7 +189,7 @@ CREATE TABLE audit_jobs (
 ### Sources
 | Method | Path | Description |
 |---|---|---|
-| POST | `/v1/sources` | Connect a new source (Git, Confluence, etc.) |
+| POST | `/v1/sources` | Connect a new source (Git in MVP; additional source types in expansion phases) |
 | GET | `/v1/sources` | List connected sources |
 | POST | `/v1/sources/{id}/sync` | Trigger manual sync of a source |
 
@@ -203,9 +209,10 @@ CREATE TABLE audit_jobs (
 ### Audit
 | Method | Path | Description |
 |---|---|---|
-| POST | `/v1/audit/run` | Trigger a manual full audit |
+| POST | `/v1/audit/run` | Trigger a manual audit for all docs or a specific `document_id` |
 | GET | `/v1/audit/jobs` | List audit job history |
-| GET | `/v1/audit/report` | Get latest audit report (JSON or PDF) |
+| GET | `/v1/audit/jobs/{id}` | Get one audit job for polling |
+| GET | `/v1/audit/report` | Get latest audit report as JSON in MVP (`format=json` only; PDF is post-MVP) |
 | GET | `/v1/audit/service/{service_name}` | Get findings for a specific service |
 
 ---
@@ -218,7 +225,7 @@ CREATE TABLE audit_jobs (
 | `dashboard_dead` | Doc URL returns non-200 | HTTP probe |
 | `command_deprecated` | Doc references a script path that no longer exists in repo | GitHub file tree |
 | `helm_version_stale` | Doc mentions a Helm chart version not in current deployment | Kubernetes / Helm |
-| `dependency_undocumented` | Service exists in prod but has no runbook | GitHub repos + documents table |
+| `dependency_undocumented` | Service exists in prod but has no runbook | Kubernetes + documents table |
 
 ---
 
@@ -234,6 +241,11 @@ CREATE TABLE audit_jobs (
 7. Send Slack/email digest if alerts exist
 8. Update audit_job (status=complete, counts)
 ```
+
+## MVP Boundaries
+
+- `GET /v1/audit/report` is JSON-only in MVP. If `format=pdf` is requested, return a clear unsupported-format error.
+- Weekly digest scheduling is post-MVP unless promoted into a first-class config model and API. MVP only supports end-of-audit notifications configured at the application level.
 
 ---
 

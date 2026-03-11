@@ -55,6 +55,15 @@ For errors:
 }
 ```
 
+Async endpoints may additionally return identifiers inside `data`, for example:
+```json
+{
+  "data": {
+    "audit_job_id": "job-001"
+  }
+}
+```
+
 ### HTTP Status Codes
 | Situation | Code |
 |---|---|
@@ -89,10 +98,12 @@ All primary keys are UUID v4. This ensures safe merges, no enumeration attacks, 
 Store variable-shape data (evidence, rule config, source config) in JSONB columns. Index JSONB fields that are queried frequently.
 
 ### Immutable Versions
-Document content is never updated in place. Each change creates a new `document_version` row. The `documents` table points to the latest. This enables drift detection over time.
+Document content is never updated in place. Each change creates a new `document_version` row. The `documents` table stores metadata only and points to the latest version. This enables drift detection over time.
+Entities are extracted from a specific `document_version`, not just from the parent `document`. Persist `document_version_id` on each entity row so historical scans, rescans, and preview-document audits can be tied back to the exact content snapshot that produced them.
 
-### Soft Deletes for Alerts
+### Soft Deletes for Alerts and Documents
 Alerts are never hard-deleted. They are `resolved` with a timestamp. This preserves audit history and allows trend analysis.
+Documents may be archived via soft delete, but their versions, scores, and historical alerts remain queryable for audit purposes.
 
 ---
 
@@ -107,6 +118,7 @@ Given the same document text, extraction must produce the same entity set every 
 | `service` | `payments-api`, `auth-service` |
 | `owner` | `@alice`, `team-platform` |
 | `url` | `https://grafana.internal/d/abc` |
+| `dashboard` | `grafana:payments-overview`, `datadog:checkout-latency` |
 | `command` | `kubectl rollout restart deploy/payments` |
 | `env_var` | `STRIPE_API_KEY`, `DB_HOST` |
 | `iam_role` | `arn:aws:iam::123456:role/deploy-role` |
@@ -143,7 +155,7 @@ class BaseDriftRule:
 | `info` | Doc is missing optional but useful information |
 
 ### Alert Deduplication
-Before creating a new alert, check if an identical unresolved alert exists for the same document + rule type + entity value. Do not create duplicates.
+Before creating a new alert, check if an identical unresolved alert exists for the same document + rule type + entity value. Do not create duplicates; keep the existing unresolved alert as the system of record.
 
 ---
 
@@ -163,6 +175,8 @@ deductions:
 floor: 0
 ```
 
+This weighting is intentionally biased toward confirmed drift over missing structure. In MVP, a stale document with no extracted entities lands at 60 before any alerts, while multiple critical alerts can push the score much lower. Revisit these deductions later if blank documents should fall into `Unreliable` or `Critical` by default.
+
 Score bands:
 | Score | Label | Color (future UI) |
 |---|---|---|
@@ -180,9 +194,11 @@ Score bands:
 - Creates one `audit_job` per run
 - Processes documents in batches of 50
 - Max runtime: 2 hours (timeout + alert)
+- `audit_job.status` values: `pending`, `running`, `complete`, `partial`, `failed`
 
 ### Manual Triggers
 - Any audit can be triggered via `POST /v1/audit/run`
+- The request may optionally target a single uploaded or changed document via `document_id`
 - Returns a `202 Accepted` with the `audit_job.id`
 - Client polls `GET /v1/audit/jobs/{id}` for status
 
@@ -199,7 +215,7 @@ Score bands:
 No integration should ever write, update, or delete anything in a connected system. Drift Radar observes; it does not act.
 
 ### Credential Storage
-Source credentials stored encrypted in `sources.config` JSONB. Never logged. Never returned in API responses (mask in GET responses).
+Source credentials stored encrypted in `sources.config` JSONB. Never logged. Never returned in API responses in cleartext. In GET responses, sensitive fields such as `token`, `api_key`, `password`, `secret`, and `webhook_url` must be replaced with the literal string `"***"` so clients can tell a value is present without seeing the secret itself.
 
 ### Rate Limiting
 All external API calls respect rate limits:
