@@ -8,14 +8,14 @@
 
 ## Phase 0 — Project Bootstrap
 
-- [ ] **T-001** Initialize Python project with `pyproject.toml` (Poetry or uv)
-- [ ] **T-002** Set up FastAPI app skeleton (`app/main.py`, health check endpoint `GET /health`)
-- [ ] **T-003** Set up Docker Compose with: app, postgres, redis
-- [ ] **T-004** Configure `pydantic-settings` for env-based config (`DATABASE_URL`, `REDIS_URL`, `SECRET_KEY`)
-- [ ] **T-005** Set up Alembic with initial empty migration
-- [ ] **T-006** Create `.env.example` file with all required variables
-- [ ] **T-007** Set up `pytest` with basic test config and a smoke test
-- [ ] **T-008** Set up pre-commit hooks (ruff, black, mypy)
+- [x] **T-001** Initialize Python project with `pyproject.toml` (Poetry or uv)
+- [x] **T-002** Set up FastAPI app skeleton (`app/main.py`, health check endpoint `GET /health`)
+- [x] **T-003** Set up Docker Compose with: app, postgres, redis
+- [x] **T-004** Configure `pydantic-settings` for env-based config (`DATABASE_URL`, `REDIS_URL`, `SECRET_KEY`)
+- [x] **T-005** Set up Alembic with initial empty migration
+- [x] **T-006** Create `.env.example` file with all required variables
+- [x] **T-007** Set up `pytest` with basic test config and a smoke test
+- [x] **T-008** Set up pre-commit hooks (ruff, black, mypy)
 
 ---
 
