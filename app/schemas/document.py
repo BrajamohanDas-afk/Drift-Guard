@@ -1,5 +1,6 @@
 import uuid
 import datetime
+from typing import List
 from typing import Optional
 from pydantic import BaseModel, ConfigDict
 
@@ -22,3 +23,7 @@ class DocumentResponse(BaseModel):
     updated_at: datetime.datetime
     source_id: Optional[uuid.UUID] = None
     latest_version_id: Optional[uuid.UUID] = None
+
+class DocumentListResponse(BaseModel):
+    data: List[DocumentResponse]
+    meta: dict
