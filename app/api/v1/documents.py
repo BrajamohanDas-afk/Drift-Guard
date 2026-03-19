@@ -1,6 +1,6 @@
 import uuid
 import hashlib
-from typing import List
+import datetime
 from app.database import get_db
 from fastapi import HTTPException
 from sqlalchemy import select, func
@@ -9,9 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.document import DocumentResponse
 from app.models.document_version import DocumentVersion
 from fastapi import APIRouter, UploadFile, File, Depends, Query
+from app.services.ingestion.markdown_ingestor import MarkdownIngestor
 from app.schemas.document import DocumentResponse, DocumentListResponse
 
 router = APIRouter()
+ingestor = MarkdownIngestor()
 
 
 @router.post("/upload", status_code=201, response_model=DocumentResponse)
@@ -39,7 +41,7 @@ async def upload_document(
     version = DocumentVersion(
         document_id = doc.id,
         raw_content = content.decode("utf-8"),
-        normalized_content = content.decode("utf-8"),
+        normalized_content = ingestor.normalize(content.decode("utf-8")),
         content_hash = content_hash,
         version_number = 1
     )
@@ -88,4 +90,20 @@ async def get_document(
     doc = await db.get(Document, document_id)
     if not doc :
         raise HTTPException(status_code=404, detail="Document not found")
+    return doc
+
+@router.delete("/{document_id}", response_model=DocumentResponse)
+async def delete_document(
+    document_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    doc = await db.get(Document, document_id)
+    if not doc :
+        raise HTTPException(status_code=404, detail="Document not found")
+    doc.is_deleted = True
+    doc.deleted_at = datetime.datetime.now(datetime.timezone.utc)
+    
+    await db.commit()
+    await db.refresh(doc)
+    
     return doc
