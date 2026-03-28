@@ -5,7 +5,7 @@ INLINE_COMMAND_PATTERN = re.compile(
 )
 
 LINE_COMMAND_PATTERN = re.compile(
-    r"^\s*((?:kubectl|helm|docker|aws|bash|sh|python|curl)\b.*)$",
+    r"^\s*(?:\$\s*)?((?:kubectl|helm|docker|aws|bash|sh|python|curl)\b.*)$",
     re.MULTILINE,
 )
 

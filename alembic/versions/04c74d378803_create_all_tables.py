@@ -108,8 +108,8 @@ def downgrade() -> None:
     op.drop_table('runbook_scores')
     op.drop_table('entities')
     op.drop_table('alerts')
-    op.drop_table('sources')
-    op.drop_table('documents')
     op.drop_table('document_versions')
+    op.drop_table('documents')
     op.drop_table('audit_jobs')
+    op.drop_table('sources')
     # ### end Alembic commands ###

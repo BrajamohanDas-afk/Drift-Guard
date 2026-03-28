@@ -1,6 +1,7 @@
 import re
 
-pattern = r'https?://[^\s]+'
-
 def extract_urls(text: str) -> list[str]:
-    return re.findall(pattern, text)
+    raw = re.findall(r'https?://[^\s<>"\')\]]+', text)
+    # strip trailing punctuation that isn't part of the URL
+    cleaned = [url.rstrip('.,;:!?)>') for url in raw]
+    return cleaned

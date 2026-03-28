@@ -45,9 +45,9 @@ def test_owner_not_found():
 
 
 # Command
-def test_command_found():
-    assert "kubectl rollout restart deploy/payments-api" in extract_commands("kubectl rollout restart deploy/payments-api")
-
+def test_command_with_prompt():
+    assert "kubectl get pods" in extract_commands("$ kubectl get pods")
+    
 def test_command_not_found():
     assert extract_commands("no commands here") == []
 
@@ -62,8 +62,9 @@ def test_env_var_not_found():
 
 # IAM role
 def test_iam_role_found():
-    assert "arn:aws:iam::123456:role/deploy-role" in extract_iam_roles("Use arn:aws:iam::123456:role/deploy-role")
-
+    assert "arn:aws:iam::123456789012:role/deploy-role" in extract_iam_roles(
+        "Use arn:aws:iam::123456789012:role/deploy-role"
+    )
 def test_iam_role_not_found():
     assert extract_iam_roles("no iam roles here") == []
 
@@ -77,8 +78,8 @@ def test_helm_chart_not_found():
 
 
 # Cluster
-def test_cluster_found():
-    assert "prod-us-east-1" in extract_clusters("Running on prod-us-east-1")
-
+def test_cluster_with_suffix():
+    assert "prod-us-east-1-blue" in extract_clusters("Running on prod-us-east-1-blue")
+    
 def test_cluster_not_found():
     assert extract_clusters("no clusters here") == []
