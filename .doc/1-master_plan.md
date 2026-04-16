@@ -26,6 +26,7 @@ The repository is no longer in planning-only state. The current codebase already
 - Markdown normalization before persistence
 - entity extraction for `url`, `dashboard`, `service`, `owner`, `command`, `env_var`, `iam_role`, `helm_chart`, and `cluster`
 - evidence collectors for GitHub, HTTP probe, incident.io, and Kubernetes
+- drift rule engine with alert persistence and alert APIs
 - unit tests for extractors and integration tests for health, documents, and source sync
 
 ## What Is Done
@@ -70,15 +71,13 @@ The repository is no longer in planning-only state. The current codebase already
 
 These planned product areas are still mostly unimplemented:
 
-- drift rules engine
-- alert creation and alert APIs
 - scoring service and score APIs
 - audit execution APIs and real `AuditJob` lifecycle
 - background workers and scheduling
 - Slack/email/webhook notification delivery
 - rate limiting, request logging, CI pipeline, and other hardening work
 
-The `alerts`, `scores`, and `audit` routers exist only as placeholders today.
+`scores` and `audit` routers are still placeholders today.
 
 ## Recommended Next Step
 
@@ -86,8 +85,8 @@ The next meaningful phase is to move from "ingest and extract" to "evaluate and 
 
 Recommended order:
 
-1. Implement the rules engine plus alert persistence and alert endpoints.
-2. Add scoring and expose `GET /v1/scores`.
+1. Add scoring and expose `GET /v1/scores`.
+2. Implement audit APIs and tracked background jobs.
 3. Convert source sync and audit execution into tracked background jobs backed by `AuditJob`.
 4. Add notification delivery only after alerts and scoring are trustworthy.
 
@@ -102,16 +101,9 @@ Recommended order:
 - source sync
 - tests for the implemented ingestion path
 
-### Next milestone
+### Current milestone
 
-"First real drift detection"
-
-That means Drift Guard should be able to:
-
-- collect evidence from at least one live source
-- evaluate at least one drift rule end-to-end
-- persist alerts
-- let users query those alerts through the API
+Alert persistence and alert APIs are implemented, but full ingest/sync-to-alert integration coverage is still pending.
 
 ## Success Criteria For The Next Milestone
 

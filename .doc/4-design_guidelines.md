@@ -85,7 +85,8 @@ Use:
 - `401` for missing or invalid API key
 - `404` for missing resources
 
-Important: the current source sync endpoint returns `202` even though it executes inline. That should be fixed when background jobs are introduced.
+Current behavior: source sync executes inline and returns `200`.
+Future async behavior (background jobs + `audit_job_id`) should use `202`.
 
 ## Data Modeling Rules
 

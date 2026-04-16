@@ -41,6 +41,8 @@ The current repository includes:
 - Git source sync
 - Markdown normalization
 - entity extraction pipeline
+- drift rules plus alert persistence APIs
+- alert list/detail/resolve APIs
 - integration and unit tests
 - Docker Compose for local Postgres and Redis
 
@@ -109,6 +111,11 @@ Current test workflow from the local shell:
 uv run pytest -v
 ```
 
+Notes:
+
+- Pure unit tests under `tests/unit` can run without Docker services.
+- Integration tests under `tests/integration` require Postgres (Docker recommended).
+
 If you want to run a focused subset:
 
 ```powershell
@@ -142,6 +149,12 @@ Current routers are mounted under `app/api/v1/`:
 - `/v1/scores`
 - `/v1/audit`
 
+Status notes:
+
+- `/v1/alerts` is implemented.
+- End-to-end ingest/sync -> rule execution -> alert creation still needs dedicated integration coverage.
+- `/v1/scores` and `/v1/audit` are still placeholders for future phases.
+
 Useful endpoints include:
 
 - `GET /health`
@@ -152,6 +165,9 @@ Useful endpoints include:
 - `POST /v1/sources`
 - `GET /v1/sources`
 - `POST /v1/sources/{id}/sync`
+- `GET /v1/alerts`
+- `GET /v1/alerts/{id}`
+- `PATCH /v1/alerts/{id}/resolve`
 
 ## Tech Stack
 

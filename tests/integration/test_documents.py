@@ -1,6 +1,8 @@
 import uuid
+
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
+
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.main import app
@@ -202,7 +204,9 @@ async def test_upload_rejects_invalid_utf8():
         )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "Uploaded file must be valid UTF-8 Markdown text"
+    assert (
+        response.json()["detail"] == "Uploaded file must be valid UTF-8 Markdown text"
+    )
 
 
 async def test_upload_rejects_oversized_file():
@@ -220,3 +224,38 @@ async def test_upload_rejects_oversized_file():
 
     assert response.status_code == 413
     assert response.json()["detail"] == "Uploaded file is too large"
+
+
+async def test_documents_endpoints_require_api_key():
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        list_response = await client.get("/v1/documents")
+        upload_response = await client.post(
+            "/v1/documents/upload",
+            files={"file": ("test.md", b"# Test", "text/markdown")},
+        )
+
+    assert list_response.status_code == 401
+    assert upload_response.status_code == 401
+
+
+async def test_documents_list_validates_pagination_bounds():
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        negative_page = await client.get(
+            "/v1/documents",
+            params={"page": 0},
+            headers=TEST_HEADERS,
+        )
+        large_page_size = await client.get(
+            "/v1/documents",
+            params={"per_page": 101},
+            headers=TEST_HEADERS,
+        )
+
+    assert negative_page.status_code == 422
+    assert large_page_size.status_code == 422

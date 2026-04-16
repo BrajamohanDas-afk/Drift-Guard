@@ -1,15 +1,17 @@
-import uuid
 import datetime
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.config import settings
 from app.database import get_db
-from sqlalchemy import func, select
-from app.models.source import Source
-from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies.auth import require_api_key
-from app.services.ingestion.git_ingestor import GitIngestor
-from fastapi import APIRouter, Depends, HTTPException, Query
-from app.services.ingestion.document_ingestion_service import upsert_document
+from app.models.source import Source
 from app.schemas.source import SourceCreate, SourceListResponse, SourceResponse
+from app.services.ingestion.document_ingestion_service import upsert_document
+from app.services.ingestion.git_ingestor import GitIngestor
 
 router = APIRouter(dependencies=[Depends(require_api_key)])
 
@@ -31,15 +33,18 @@ async def create_source(
 
 @router.get("", response_model=SourceListResponse)
 async def list_sources(
-    page: int = Query(default=1),
-    per_page: int = Query(default=20),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ):
     count_result = await db.execute(select(func.count()).select_from(Source))
     total = count_result.scalar()
 
     result = await db.execute(
-        select(Source).offset((page - 1) * per_page).limit(per_page)
+        select(Source)
+        .order_by(Source.created_at.desc(), Source.id.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
     )
     sources = result.scalars().all()
 
@@ -53,7 +58,7 @@ async def list_sources(
     }
 
 
-@router.post("/{source_id}/sync", status_code=202)
+@router.post("/{source_id}/sync", status_code=200)
 async def sync_source(
     source_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
@@ -72,9 +77,12 @@ async def sync_source(
     path_filter = config.get("path_filter")
 
     if not repo_url:
-        raise HTTPException(status_code=400, detail="Source config must include repo_url")
+        raise HTTPException(
+            status_code=400,
+            detail="Source config must include repo_url",
+        )
     if not token:
-        raise HTTPException(status_code=400, detail="Source config must include token")
+        raise HTTPException(status_code=400, detail="GITHUB_TOKEN is not configured")
 
     git_ingestor = GitIngestor(
         repo_url=repo_url,
@@ -82,7 +90,15 @@ async def sync_source(
         branch=branch,
         path_filter=path_filter,
     )
-    files = git_ingestor.fetch_markdown_files()
+    try:
+        files = git_ingestor.fetch_markdown_files()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to fetch repository files",
+        ) from exc
 
     created_documents = 0
     created_versions = 0

@@ -82,19 +82,19 @@
 
 ## Phase 5 - Drift Rules Engine
 
-- [ ] T-070 Define `BaseDriftRule` interface
-- [ ] T-071 Implement `OwnerMissingRule`
-- [ ] T-072 Implement `DashboardDeadRule`
-- [ ] T-073 Implement `CommandDeprecatedRule`
-- [ ] T-074 Implement `HelmVersionStaleRule`
-- [ ] T-075 Implement `DependencyUndocumentedRule`
-- [ ] T-076 Implement `RulesEngine`
-- [ ] T-077 Implement alert deduplication
-- [ ] T-078 Persist generated alerts
-- [ ] T-079 Implement `GET /v1/alerts`
-- [ ] T-080 Implement `GET /v1/alerts/{id}`
-- [ ] T-081 Implement `PATCH /v1/alerts/{id}/resolve`
-- [ ] T-082 Write rule tests
+- [x] T-070 Define `BaseDriftRule` interface
+- [x] T-071 Implement `OwnerMissingRule`
+- [x] T-072 Implement `DashboardDeadRule`
+- [x] T-073 Implement `CommandDeprecatedRule`
+- [x] T-074 Implement `HelmVersionStaleRule`
+- [x] T-075 Implement `DependencyUndocumentedRule`
+- [x] T-076 Implement `RulesEngine`
+- [x] T-077 Implement alert deduplication
+- [x] T-078 Persist generated alerts
+- [x] T-079 Implement `GET /v1/alerts`
+- [x] T-080 Implement `GET /v1/alerts/{id}`
+- [x] T-081 Implement `PATCH /v1/alerts/{id}/resolve`
+- [x] T-082 Write rule tests
 
 ---
 
@@ -154,10 +154,10 @@
 
 ## Current Recommended Next Slice
 
-- [ ] N-001 Add the first real evidence collector
-- [ ] N-002 Implement the first rule that can generate an alert
-- [ ] N-003 Persist and expose alerts through `/v1/alerts`
-- [ ] N-004 Add tests for the first end-to-end drift detection path
+- [ ] N-005 Implement first scoring endpoint (`GET /v1/scores`)
+- [ ] N-006 Implement tracked audit run (`POST /v1/audit/run`)
+- [ ] N-007 Move source sync to background job with non-null `audit_job_id`
+- [ ] N-008 Add integration tests for score and audit flows
 
 ---
 
@@ -174,4 +174,4 @@ Completed foundation:
 
 Current gap between plan and product:
 
-- the project can ingest and extract, but it still cannot evaluate drift or report it through alerts, scores, or audits
+- the project can ingest, extract, and report alerts, but scoring and audit APIs are still pending

@@ -13,7 +13,7 @@ Drift-Guard/
 |-- app/
 |   |-- api/v1/
 |   |   |-- audit.py          # placeholder router
-|   |   |-- alerts.py         # placeholder router
+|   |   |-- alerts.py         # implemented
 |   |   |-- documents.py      # implemented
 |   |   |-- scores.py         # placeholder router
 |   |   `-- sources.py        # implemented
@@ -52,10 +52,12 @@ Drift-Guard/
 - `POST /v1/sources`
 - `GET /v1/sources`
 - `POST /v1/sources/{source_id}/sync`
+- `GET /v1/alerts`
+- `GET /v1/alerts/{alert_id}`
+- `PATCH /v1/alerts/{alert_id}/resolve`
 
 ### Reserved but not implemented yet
 
-- `/v1/alerts/*`
 - `/v1/scores/*`
 - `/v1/audit/*`
 
@@ -103,7 +105,7 @@ Phase A exit condition (met):
   instead of raising an exception)
 - external API behavior should be covered with mocked responses in unit tests
 
-### Phase B - Drift Rules And Alerts
+### Phase B - Drift Rules And Alerts (Implemented)
 
 Add rule evaluation under `app/services/drift/` and real endpoints under `app/api/v1/alerts.py`.
 
@@ -115,9 +117,7 @@ Minimum slice:
 - alert listing and detail endpoints
 - alert resolution endpoint
 
-Exit condition:
-
-- a synced or uploaded document can generate a real alert visible through the API
+Exit condition: met.
 
 ### Phase C - Scoring
 
@@ -161,9 +161,9 @@ After the rule pipeline is reliable:
 
 ## Current Risks To Respect While Implementing
 
-- `alerts`, `scores`, and `audit` routers are currently empty, so public docs should not imply those features already work.
+- `scores` and `audit` routers are currently empty, so public docs should not imply those features already work.
 - source sync currently depends on `settings.github_token`, so documentation should describe GitHub auth as app-level configuration for now.
-- the sync endpoint returns `202`, but it performs work inline and returns `audit_job_id: null`; background execution is still pending.
+- the sync endpoint currently performs work inline and returns `audit_job_id: null`; background execution is still pending.
 - response formats are mixed today, so any API standardization should be handled deliberately instead of being changed silently.
 
 ## Definition Of Done For The Next Iteration

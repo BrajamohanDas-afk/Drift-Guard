@@ -1,6 +1,7 @@
-import uuid
 import datetime
-from typing import Optional
+import uuid
+from typing import List, Optional
+
 from pydantic import BaseModel, ConfigDict
     
 
@@ -16,3 +17,8 @@ class AlertResponse(BaseModel):
     created_at: datetime.datetime
     resolved_at: Optional[datetime.datetime] = None
     resolved: bool
+
+
+class AlertListResponse(BaseModel):
+    data: List[AlertResponse]
+    meta: dict

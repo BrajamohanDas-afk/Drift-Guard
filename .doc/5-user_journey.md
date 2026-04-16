@@ -165,12 +165,41 @@ Expected result:
 
 The document is archived from active use while version history remains in the database.
 
+## Journey 5 - Review And Resolve Alerts
+
+**Goal:** inspect detected drift alerts and resolve one after triage.
+
+### Steps
+
+1. List alerts.
+
+```http
+GET /v1/alerts
+Header: X-API-Key: <api-key>
+```
+
+2. Open one alert in detail.
+
+```http
+GET /v1/alerts/{alert_id}
+Header: X-API-Key: <api-key>
+```
+
+3. Resolve the alert.
+
+```http
+PATCH /v1/alerts/{alert_id}/resolve
+Header: X-API-Key: <api-key>
+```
+
+### Outcome
+
+Engineers can close acknowledged drift findings while preserving audit history.
+
 ## Future Journeys - Not Implemented Yet
 
 The following product journeys are still planned only:
 
-- reviewing generated alerts
-- resolving alerts
 - reading per-document reliability scores
 - triggering tracked audit jobs
 - consuming JSON audit reports
