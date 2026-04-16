@@ -73,7 +73,7 @@
 
 - [x] T-060 Implement GitHub evidence collector
 - [x] T-061 Implement HTTP probe collector
-- [x] T-062 Implement PagerDuty collector
+- [x] T-062 Implement incident.io collector
 - [x] T-063 Implement Kubernetes collector
 - [x] T-064 Implement `EvidenceStore`
 - [x] T-065 Write collector unit tests with mocked responses

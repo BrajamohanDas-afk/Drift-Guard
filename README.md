@@ -120,16 +120,17 @@ uv run pytest tests/integration/test_documents.py tests/integration/test_sources
 Phase 4 evidence collectors support optional external integrations:
 
 - `GITHUB_TOKEN` for GitHub evidence collection
-- `PAGERDUTY_API_TOKEN` for PagerDuty evidence collection
+- `INCIDENTIO_API_TOKEN` for incident.io evidence collection
+- `INCIDENTIO_CATALOG_TYPE_ID` to scope incident.io catalog lookups
 - `KUBERNETES_API_URL` and `KUBERNETES_BEARER_TOKEN` for Kubernetes evidence collection
 
 Important behavior:
 
-- PagerDuty and Kubernetes tokens are optional for local development.
-- If `PAGERDUTY_API_TOKEN` is not set, the collector returns a structured
+- incident.io and Kubernetes tokens are optional for local development.
+- If `INCIDENTIO_API_TOKEN` is not set, the collector returns a structured
   "not configured" evidence error instead of crashing.
 - Unit tests use mocked external API responses, so local test runs do not require
-  live PagerDuty or Kubernetes credentials.
+  live incident.io or Kubernetes credentials.
 
 ## API Surface
 
@@ -164,4 +165,3 @@ Useful endpoints include:
 - PyGithub
 - pytest
 - Docker Compose
-

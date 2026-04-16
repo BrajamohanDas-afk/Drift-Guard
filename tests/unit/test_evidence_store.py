@@ -63,7 +63,7 @@ def test_upsert_from_payload_infers_collection_error():
     store = EvidenceStore()
 
     record = store.upsert_from_payload(
-        collector="pagerduty",
+        collector="incidentio",
         target="payments-api",
         payload={"exists": False, "error": "Unauthorized"},
     )

@@ -25,7 +25,7 @@ The repository is no longer in planning-only state. The current codebase already
 - GitHub-backed Git source creation, listing, and sync
 - Markdown normalization before persistence
 - entity extraction for `url`, `dashboard`, `service`, `owner`, `command`, `env_var`, `iam_role`, `helm_chart`, and `cluster`
-- evidence collectors for GitHub, HTTP probe, PagerDuty, and Kubernetes
+- evidence collectors for GitHub, HTTP probe, incident.io, and Kubernetes
 - unit tests for extractors and integration tests for health, documents, and source sync
 
 ## What Is Done
@@ -62,9 +62,9 @@ The repository is no longer in planning-only state. The current codebase already
 
 ### Evidence Collection Foundation
 
-- Phase 4 collectors are implemented for GitHub, HTTP probe, PagerDuty, and Kubernetes
+- Phase 4 collectors are implemented for GitHub, HTTP probe, incident.io, and Kubernetes
 - collector tests use mocked external responses for reliable local development
-- real PagerDuty and Kubernetes credentials are optional and only required for live evidence checks
+- real incident.io and Kubernetes credentials are optional and only required for live evidence checks
 
 ## What Is Not Done Yet
 

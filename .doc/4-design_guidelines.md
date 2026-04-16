@@ -39,7 +39,7 @@ All external integrations must stay read-only. Drift Guard should observe and re
 
 ### Optional Integration Degradation
 
-External evidence integrations (for example PagerDuty and Kubernetes) must be optional.
+External evidence integrations (for example incident.io and Kubernetes) must be optional.
 
 If credentials are missing:
 

@@ -1,8 +1,8 @@
-from pydantic import ConfigDict
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class Settings(BaseSettings):
-    model_config = ConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(env_file=".env")
 
     database_url: str
     alembic_database_url: str
@@ -11,11 +11,10 @@ class Settings(BaseSettings):
     github_token: str
     sql_echo: bool = False
     api_key: str
-    pagerduty_api_token: str | None = None
+    incidentio_api_token: str | None = None
+    incidentio_catalog_type_id: str | None = None
     kubernetes_api_url: str | None = None
     kubernetes_bearer_token: str | None = None
     kubernetes_verify_ssl: bool = True
-    
-    model_config = SettingsConfigDict(env_file=".env")
 
 settings = Settings()

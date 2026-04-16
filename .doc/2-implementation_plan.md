@@ -86,21 +86,20 @@ Drift-Guard/
 
 The next implementation phase should build on top of the current ingestion pipeline instead of redesigning it.
 
-### Phase A - Evidence Collection
+### Phase A - Evidence Collection (Implemented)
 
-Add real collectors under `app/services/evidence/`:
+Implemented collectors under `app/services/evidence/`:
 
 - GitHub collector for file existence and ownership evidence
 - HTTP probe collector for URL checks
-- PagerDuty collector for service existence evidence
+- incident.io collector for service catalog evidence
 - Kubernetes collector for deployment evidence
-- optional first collector abstraction for shared request behavior
 
-Exit condition:
+Phase A exit condition (met):
 
 - at least one collector returns structured evidence with tests
 - collectors degrade gracefully when optional credentials are not configured
-  (for example, PagerDuty returns a structured "API token not configured" error
+  (for example, incident.io returns a structured "API token not configured" error
   instead of raising an exception)
 - external API behavior should be covered with mocked responses in unit tests
 
