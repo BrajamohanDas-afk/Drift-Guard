@@ -1,6 +1,7 @@
 import datetime
 import hashlib
 import json
+import logging
 import uuid
 from datetime import date, time
 
@@ -9,9 +10,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.alert import Alert
 from app.services.drift.rules.base import DriftAlertDraft
+from app.services.scoring.scoring_service import ScoringService
+
+logger = logging.getLogger(__name__)
 
 
 class AlertService:
+    def __init__(self) -> None:
+        self._scoring_service = ScoringService()
+
     def _normalize_evidence_value(self, value: object) -> object:
         if value is None or isinstance(value, (bool, int, float, str)):
             return value
@@ -93,6 +100,7 @@ class AlertService:
 
         created: list[Alert] = []
         seen_in_batch: set[tuple[str, str, str, str, str]] = set()
+        changed_document_ids: set[uuid.UUID] = set()
         for draft in alerts:
             dedup_key = self._dedup_key(draft)
             if dedup_key in seen_in_batch:
@@ -124,6 +132,8 @@ class AlertService:
             db.add(created_alert)
             created.append(created_alert)
             seen_in_batch.add(dedup_key)
+            if draft.document_id is not None:
+                changed_document_ids.add(draft.document_id)
 
         if not created:
             return []
@@ -131,6 +141,8 @@ class AlertService:
         await db.commit()
         for alert in created:
             await db.refresh(alert)
+        if changed_document_ids:
+            await self._refresh_document_scores(db, document_ids=changed_document_ids)
         return created
 
     async def list_alerts(
@@ -169,7 +181,10 @@ class AlertService:
         total = int(total_result.scalar() or 0)
 
         result = await db.execute(
-            query.order_by(Alert.created_at.desc())
+            query.order_by(
+                Alert.created_at.desc(),
+                Alert.id.desc(),
+            )
             .offset((page - 1) * per_page)
             .limit(per_page)
         )
@@ -198,7 +213,28 @@ class AlertService:
         if update_result.rowcount:
             await db.commit()
             await db.refresh(alert)
+            if alert.document_id is not None:
+                await self._refresh_document_scores(
+                    db, document_ids={alert.document_id}
+                )
             return alert
 
         await db.refresh(alert)
         return alert
+
+    async def _refresh_document_scores(
+        self, db: AsyncSession, *, document_ids: set[uuid.UUID]
+    ) -> None:
+        for document_id in document_ids:
+            try:
+                await self._scoring_service.score_document(db, document_id=document_id)
+            except Exception as exc:
+                # Alert writes are committed before score refresh; keep refresh best-effort.
+                await db.rollback()
+                logger.warning(
+                    "Score refresh failed for document %s after alert write; "
+                    "continuing without raising.",
+                    document_id,
+                    exc_info=exc,
+                )
+                continue

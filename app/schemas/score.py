@@ -1,6 +1,6 @@
-import uuid
 import datetime
-from typing import Optional
+import uuid
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -10,5 +10,16 @@ class ScoreResponse(BaseModel):
     id: uuid.UUID
     document_id: uuid.UUID
     score: float
-    breakdown: Optional[dict] = None
+    breakdown: dict | None = None
     scored_at: datetime.datetime
+
+
+class ScoreListMeta(BaseModel):
+    total: int
+    page: int
+    per_page: int
+
+
+class ScoreListResponse(BaseModel):
+    data: list[ScoreResponse]
+    meta: ScoreListMeta
