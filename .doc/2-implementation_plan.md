@@ -1,6 +1,8 @@
 # Drift Guard - Implementation Plan
 
-> UPDATED 2026-03-30: Rewritten to match the current codebase. This is now a status-aware implementation plan, not a greenfield design doc.
+> UPDATED 2026-04-18: Rewritten to match the current codebase and strict 0 Rs execution policy for Phases 7-9.
+>
+> UPDATED 2026-05-02: Audit run/job endpoints, source sync background handoff, and audit report endpoints are implemented on top of the ARQ worker runtime.
 
 ## Current Architecture
 
@@ -12,10 +14,10 @@ The repository already has the ingestion foundation in place.
 Drift-Guard/
 |-- app/
 |   |-- api/v1/
-|   |   |-- audit.py          # placeholder router
+|   |   |-- audit.py          # run, job tracking, and reports implemented
 |   |   |-- alerts.py         # implemented
 |   |   |-- documents.py      # implemented
-|   |   |-- scores.py         # placeholder router
+|   |   |-- scores.py         # implemented
 |   |   `-- sources.py        # implemented
 |   |-- config.py
 |   |-- database.py
@@ -23,13 +25,14 @@ Drift-Guard/
 |   |-- models/
 |   |-- schemas/
 |   |-- services/
+|   |   |-- audit/            # audit job lifecycle + report summaries
 |   |   |-- extraction/       # implemented extractors
 |   |   |-- ingestion/        # implemented upload + git ingestion helpers
-|   |   |-- alerting/         # placeholder package
-|   |   |-- drift/            # placeholder package
-|   |   |-- evidence/         # placeholder package
-|   |   `-- scoring/          # placeholder package
-|   `-- workers/              # placeholder files
+|   |   |-- alerting/         # partial/placeholder package
+|   |   |-- drift/            # implemented rules + alert service
+|   |   |-- evidence/         # implemented collectors + store
+|   |   `-- scoring/          # implemented scoring service
+|   `-- workers/              # ARQ worker runtime + task queue
 |-- alembic/
 |-- tests/
 |   |-- integration/
@@ -55,11 +58,13 @@ Drift-Guard/
 - `GET /v1/alerts`
 - `GET /v1/alerts/{alert_id}`
 - `PATCH /v1/alerts/{alert_id}/resolve`
-
-### Reserved but not implemented yet
-
-- `/v1/scores/*`
-- `/v1/audit/*`
+- `GET /v1/scores`
+- `GET /v1/scores/{document_id}`
+- `POST /v1/audit/run`
+- `GET /v1/audit/jobs`
+- `GET /v1/audit/jobs/{audit_job_id}`
+- `GET /v1/audit/report`
+- `GET /v1/audit/service/{service_name}`
 
 ## Current Data Flow
 
@@ -79,14 +84,32 @@ Drift-Guard/
 
 1. Validate API key.
 2. Load a Git source.
-3. Use `GitIngestor` to recursively fetch Markdown files from GitHub.
-4. Upsert each file using `source_id + path` as identity.
-5. Reuse version history when content is unchanged.
-6. Update `last_synced_at`.
+3. Validate sync prerequisites (`git` source type, `repo_url`, configured `GITHUB_TOKEN`).
+4. Create a pending `AuditJob`.
+5. Enqueue `ingest_task` through ARQ/Redis and return `202` with non-null `audit_job_id`.
+6. Worker uses `GitIngestor` to recursively fetch Markdown files from GitHub.
+7. Upsert each file using `source_id + path` as identity.
+8. Reuse version history when content is unchanged.
+9. Update `last_synced_at` and mark the audit job completed or failed.
+
+### Audit report flow
+
+1. Validate API key.
+2. For `GET /v1/audit/report`, summarize active documents, unresolved alerts, the latest audit job, and latest per-document score snapshots.
+3. For `GET /v1/audit/service/{service_name}`, restrict the same summary to documents whose explicit `service_name` or latest extracted `service` entity matches.
+4. Return `404` for unknown services and keep deleted documents out of document-backed counts.
 
 ## What The Codebase Is Ready For Next
 
 The next implementation phase should build on top of the current ingestion pipeline instead of redesigning it.
+
+Phase mapping for clarity:
+
+- Phase A = tracker Phase 4
+- Phase B = tracker Phase 5
+- Phase C = tracker Phase 6
+- Phase D = tracker Phase 7
+- Phase E = tracker Phases 8-9
 
 ### Phase A - Evidence Collection (Implemented)
 
@@ -119,7 +142,7 @@ Minimum slice:
 
 Exit condition: met.
 
-### Phase C - Scoring
+### Phase C - Scoring (Implemented)
 
 Implement `app/services/scoring/` and `app/api/v1/scores.py`.
 
@@ -129,25 +152,36 @@ Minimum slice:
 - `runbook_scores` persistence
 - list and detail score endpoints
 
-Exit condition:
+Exit condition: met.
 
-- each document can return a current reliability score and breakdown
+### 0 Rs Constraint For Remaining Phases
 
-### Phase D - Jobs And Audit Reporting
+Phases D and E must stay within 0 Rs recurring spend.
+
+Implementation constraints:
+
+- background jobs must run using local/self-hosted workers with existing Redis
+- schedules must run from local/self-hosted runtime (no paid managed schedulers)
+- Slack delivery should use incoming webhooks only
+- email delivery should use a local/test sink mode first
+- observability should start with structured logs and health checks
+- paid SaaS tooling must not be required for phase completion
+
+### Phase D - Jobs And Audit Reporting (0 Rs)
 
 Use `AuditJob` for real tracked execution.
 
 Minimum slice:
 
-- move sync/audit work into background execution
-- create `AuditJob` rows
-- implement `/v1/audit/run`
-- implement audit status polling
-- implement a basic JSON audit report
+- move sync/audit work into background execution (implemented for manual audit run and source sync)
+- create `AuditJob` rows (implemented)
+- implement `/v1/audit/run` (implemented)
+- implement audit status polling (implemented through list/detail job endpoints)
+- implement a basic JSON audit report (implemented)
 
 Exit condition:
 
-- a manual audit can be triggered, tracked, and queried
+- a manual audit can be triggered, tracked, queried, and summarized through global/service JSON reports
 
 ### Phase E - Notifications And Hardening
 
@@ -158,20 +192,18 @@ After the rule pipeline is reliable:
 - rate limiting
 - CI workflow
 - contributor documentation
+- free-only observability path (open-source/self-hosted)
 
 ## Current Risks To Respect While Implementing
 
-- `scores` and `audit` routers are currently empty, so public docs should not imply those features already work.
+- Windows-side test runs need `DATABASE_URL`/`ALEMBIC_DATABASE_URL` pointed at `localhost:5433`; in-container app/worker runs use the Docker service hostname `postgres`.
 - source sync currently depends on `settings.github_token`, so documentation should describe GitHub auth as app-level configuration for now.
-- the sync endpoint currently performs work inline and returns `audit_job_id: null`; background execution is still pending.
+- the sync endpoint now returns `202` with a non-null `audit_job_id`; clients should poll `/v1/audit/jobs/{audit_job_id}` for lifecycle state.
 - response formats are mixed today, so any API standardization should be handled deliberately instead of being changed silently.
 
 ## Definition Of Done For The Next Iteration
 
-The next code iteration should not stop at placeholders. It should deliver the first end-to-end drift detection slice:
+The next code iteration should move into Phase E notification delivery, not redo completed Phase D slices.
 
-- evidence collector
-- drift rule
-- alert persistence
-- alert API
-- tests proving the flow works
+- notification flow is wired with free-only delivery paths
+- hardening tasks proceed without introducing paid dependencies

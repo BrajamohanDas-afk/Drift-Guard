@@ -98,8 +98,9 @@ Endpoint: `GET /v1/sources`
 Endpoint: `POST /v1/sources/{source_id}/sync`
 
 1. Use `SOURCE_ID`.
-2. If `GITHUB_TOKEN` is configured and repo is reachable: expect `200` with counters.
+2. If `GITHUB_TOKEN` is configured: expect `202` with a non-null `audit_job_id` and `status: pending`.
 3. If token is missing: expect `400` with `GITHUB_TOKEN is not configured`.
+4. Poll `GET /v1/audit/jobs/{audit_job_id}` to watch the background sync lifecycle.
 
 ## 5. Alerts API
 
@@ -158,8 +159,57 @@ Notes:
 
 ## 7. Audit API
 
-Current route prefix exists (`/v1/audit`) but no operations are implemented yet.
-So this section may not show actionable endpoints in Swagger for now.
+## 7.1 Trigger audit run
+Endpoint: `POST /v1/audit/run`
+
+Body is optional:
+```json
+{
+  "triggered_by": "manual"
+}
+```
+
+1. Execute with valid key.
+2. Expect `202` with an audit job object.
+3. Save `id` as `AUDIT_JOB_ID`.
+4. If Redis/worker queue is unavailable, expect `503` and the created job is marked failed.
+
+## 7.2 List audit jobs
+Endpoint: `GET /v1/audit/jobs?page=1&per_page=20`
+
+1. Execute with valid key.
+2. Expect `200` with `data` and `meta`.
+3. Optional filter: `status=pending`, `running`, `completed`, or `failed`.
+
+## 7.3 Get audit job by id
+Endpoint: `GET /v1/audit/jobs/{audit_job_id}`
+
+1. Use `AUDIT_JOB_ID`.
+2. Expect `200` with lifecycle fields such as `status`, `docs_scanned`, `started_at`, `completed_at`, and `error`.
+3. Use random UUID -> expect `404`.
+
+## 7.4 Get global audit report
+Endpoint: `GET /v1/audit/report`
+
+1. Execute with valid key.
+2. Expect `200` with `scope: global`.
+3. Verify the response includes:
+   - `latest_audit_job`
+   - `totals.documents`
+   - `totals.unresolved_alerts`
+   - `alerts_by_severity`
+   - `score_summary`
+   - `lowest_scoring_documents`
+
+## 7.5 Get service audit report
+Endpoint: `GET /v1/audit/service/{service_name}`
+
+1. Use a known service name from a document `service_name` field or latest extracted `service` entity.
+2. Expect `200` with `scope: service` and `service_name` matching the request.
+3. Use a missing service name -> expect `404`.
+
+Notes:
+- Source sync runs in the background and returns a tracked `audit_job_id`.
 
 ## 8. Non-v1 Endpoint
 
@@ -184,6 +234,6 @@ Endpoint: `GET /health`
 - [ ] Sources create/list/sync works (or returns expected token/config error)
 - [ ] Alerts list/get/resolve works
 - [ ] Scores list/get works with expected empty/data behavior
+- [ ] Audit run/job/report endpoints work
 - [ ] Health check works
 - [ ] Error codes and validation behavior match expectations
-

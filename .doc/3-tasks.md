@@ -1,6 +1,10 @@
 # Drift Guard - Tasks
 
-> UPDATED 2026-03-30: Task statuses below were reconciled against the current repository. Checkmarks mean the code and tests exist today. Open tasks are still pending or only partially addressed.
+> UPDATED 2026-03-30: Task statuses below were reconciled against the current repository. Checkmarks mean work is implemented and verified (tests where applicable). Open tasks are still pending or only partially addressed.
+>
+> UPDATED 2026-04-18: Phases 7-9 are now constrained to strict 0 Rs recurring spend (no paid dependencies required to complete these phases).
+>
+> UPDATED 2026-05-02: Tracked audit run/job APIs, source sync background handoff, and audit report endpoints are implemented and verified. Full integration suite passes locally against Docker/Postgres when the Windows-side test process uses `localhost:5433`.
 
 ---
 
@@ -46,7 +50,7 @@
 - [x] T-029 Implement `GET /v1/sources`
 - [x] T-030 Implement source sync endpoint and document upsert flow
 - [x] T-031 Write integration tests for upload and sync behavior
-- [ ] T-032 Move source sync to a real background job and return a non-null `audit_job_id`
+- [x] T-032 Move source sync to a real background job and return a non-null `audit_job_id`
 
 ---
 
@@ -100,37 +104,41 @@
 
 ## Phase 6 - Scoring
 
-- [ ] T-090 Implement scoring algorithm
-- [ ] T-091 Add score deductions and breakdown logic
-- [ ] T-092 Persist scores to `runbook_scores`
-- [ ] T-093 Trigger scoring after rule evaluation
-- [ ] T-094 Implement `GET /v1/scores`
-- [ ] T-095 Implement `GET /v1/scores/{document_id}`
-- [ ] T-096 Write scorer tests
+- [x] T-090 Implement scoring algorithm
+- [x] T-091 Add score deductions and breakdown logic
+- [x] T-092 Persist scores to `runbook_scores`
+- [x] T-093 Trigger scoring after rule evaluation
+- [x] T-094 Implement `GET /v1/scores`
+- [x] T-095 Implement `GET /v1/scores/{document_id}`
+- [x] T-096 Write scorer tests
 
 ---
 
 ## Phase 7 - Background Jobs And Scheduling
 
-- [ ] T-100 Set up background worker runtime
-- [ ] T-101 Implement `nightly_scan`
-- [ ] T-102 Implement async `ingest_task`
-- [ ] T-103 Implement async `score_task`
-- [ ] T-104 Configure nightly schedule
-- [ ] T-105 Implement `AuditJob` lifecycle
-- [ ] T-106 Implement `POST /v1/audit/run`
-- [ ] T-107 Implement `GET /v1/audit/jobs`
-- [ ] T-108 Implement `GET /v1/audit/jobs/{id}`
-- [ ] T-109 Implement `GET /v1/audit/report`
-- [ ] T-110 Implement `GET /v1/audit/service/{service_name}`
+- Constraint: use local/self-hosted worker runtime with existing Redis and Docker services only.
+
+- [x] T-100 Set up background worker runtime
+- [x] T-101 Implement `nightly_scan`
+- [x] T-102 Implement async `ingest_task`
+- [x] T-103 Implement async `score_task`
+- [x] T-104 Configure nightly schedule
+- [x] T-105 Implement `AuditJob` lifecycle
+- [x] T-106 Implement `POST /v1/audit/run`
+- [x] T-107 Implement `GET /v1/audit/jobs`
+- [x] T-108 Implement `GET /v1/audit/jobs/{id}`
+- [x] T-109 Implement `GET /v1/audit/report`
+- [x] T-110 Implement `GET /v1/audit/service/{service_name}`
 
 ---
 
 ## Phase 8 - Alerting And Output
 
+- Constraint: free-only delivery in this phase (Slack webhook + local/test email sink).
+
 - [ ] T-120 Implement Slack webhook notifier
 - [ ] T-121 Define Slack message payload format
-- [ ] T-122 Implement email notifier
+- [ ] T-122 Implement email notifier with local/test sink mode (no paid provider required)
 - [ ] T-123 Implement configurable alert routing
 - [ ] T-124 Trigger notifier delivery at end of audit
 - [ ] T-125 Add completion webhook support for manual audit runs
@@ -140,6 +148,8 @@
 
 ## Phase 9 - Hardening And Docs
 
+- Constraint: free/local/self-hosted implementation only; no paid SaaS or paid CI required.
+
 - [x] T-130 Add API key enforcement for the active document/source endpoints
 - [ ] T-131 Add request logging middleware
 - [ ] T-132 Add rate limiting middleware
@@ -147,17 +157,19 @@
 - [x] T-134 Maintain a current `README.md`
 - [ ] T-135 Add `CONTRIBUTING.md`
 - [ ] T-136 Set up GitHub Actions CI
-- [ ] T-137 Add Sentry or equivalent error monitoring
+- [ ] T-137 Add open-source/self-hosted equivalent error monitoring (no paid SaaS requirement)
 - [ ] T-138 Load test the nightly scan
 
 ---
 
 ## Current Recommended Next Slice
 
-- [ ] N-005 Implement first scoring endpoint (`GET /v1/scores`)
-- [ ] N-006 Implement tracked audit run (`POST /v1/audit/run`)
-- [ ] N-007 Move source sync to background job with non-null `audit_job_id`
-- [ ] N-008 Add integration tests for score and audit flows
+- [x] N-009 Implement remaining worker task wiring (`T-103`)
+- [x] N-010 Implement tracked audit run job APIs only (`T-105` to `T-108`)
+- [x] N-011 Move sync to background execution with non-null `audit_job_id` (`T-032`)
+- [x] N-012 Run and finalize integration tests for audit and job flows
+- [x] N-013 Add audit reporting endpoints (`T-109` and `T-110`)
+- [ ] N-014 Implement Phase 8 notification delivery (`T-120` to `T-126`)
 
 ---
 
@@ -170,8 +182,13 @@ Completed foundation:
 - upload ingestion
 - Git sync
 - entity extraction
-- test coverage for the implemented ingestion path
+- evidence collectors and evidence store
+- drift rules engine and alert APIs
+- scoring service and score APIs
+- local/self-hosted worker runtime, tracked audit job APIs, and audit report APIs
+- test coverage for ingestion, alerts, and scoring slices
 
 Current gap between plan and product:
 
-- the project can ingest, extract, and report alerts, but scoring and audit APIs are still pending
+- the project can ingest, extract, report alerts, expose scores, enqueue tracked audit runs, poll audit jobs, and return global/service audit summaries
+- source sync now returns a tracked `audit_job_id`; notification delivery is pending

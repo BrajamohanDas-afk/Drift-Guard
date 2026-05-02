@@ -1,3 +1,4 @@
+import importlib
 import uuid
 
 from httpx import ASGITransport, AsyncClient
@@ -6,16 +7,23 @@ from sqlalchemy import select
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.main import app
+from app.models.audit_job import AuditJob
 from app.models.document import Document
 from app.models.document_version import DocumentVersion
 from app.models.source import Source
 from app.services.ingestion.git_ingestor import GitIngestor
+from app.services.ingestion.source_sync_service import sync_source_by_id
+from app.workers.queue import QueueEnqueueError
+
+sources_api_module = importlib.import_module("app.api.v1.sources")
 
 TEST_HEADERS = {"x-api-key": settings.api_key}
+
 
 async def test_sync_source_keeps_same_filename_documents_separate_by_path(
     monkeypatch,
 ):
+    monkeypatch.setattr(settings, "github_token", "token")
     sync_payloads = [
         [
             {
@@ -70,24 +78,16 @@ async def test_sync_source_keeps_same_filename_documents_separate_by_path(
             headers=TEST_HEADERS,
         )
         assert create_source_response.status_code == 201
-        source_id = create_source_response.json()["id"]
+        source_uuid = uuid.UUID(create_source_response.json()["id"])
 
-        first_sync_response = await client.post(
-            f"/v1/sources/{source_id}/sync",
-            headers=TEST_HEADERS,
-        )
-        assert first_sync_response.status_code == 200
-
-        second_sync_response = await client.post(
-            f"/v1/sources/{source_id}/sync",
-            headers=TEST_HEADERS,
-        )
-        assert second_sync_response.status_code == 200
+    async with AsyncSessionLocal() as session:
+        await sync_source_by_id(source_uuid, db=session)
+        await sync_source_by_id(source_uuid, db=session)
 
     async with AsyncSessionLocal() as session:
         document_result = await session.execute(
             select(Document)
-            .where(Document.source_id == source_id)
+            .where(Document.source_id == source_uuid)
             .order_by(Document.path.asc())
         )
         documents = document_result.scalars().all()
@@ -114,6 +114,111 @@ async def test_sync_source_keeps_same_filename_documents_separate_by_path(
         }
 
 
+async def test_sync_source_endpoint_enqueues_background_job_and_returns_audit_job_id(
+    monkeypatch,
+):
+    enqueue_calls = []
+    monkeypatch.setattr(settings, "github_token", "token")
+
+    async def fake_enqueue_ingest_task(*, source_id, audit_job_id, job_id):
+        enqueue_calls.append((source_id, audit_job_id, job_id))
+        return object()
+
+    monkeypatch.setattr(
+        sources_api_module,
+        "enqueue_ingest_task",
+        fake_enqueue_ingest_task,
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        create_source_response = await client.post(
+            "/v1/sources",
+            json={
+                "name": "Queued Runbooks",
+                "type": "git",
+                "config": {"repo_url": "https://github.com/acme/runbooks"},
+            },
+            headers=TEST_HEADERS,
+        )
+        assert create_source_response.status_code == 201
+        source_id = create_source_response.json()["id"]
+
+        sync_response = await client.post(
+            f"/v1/sources/{source_id}/sync",
+            headers=TEST_HEADERS,
+        )
+
+    assert sync_response.status_code == 202
+    payload = sync_response.json()["data"]
+    audit_job_id = uuid.UUID(payload["audit_job_id"])
+    assert payload == {
+        "audit_job_id": str(audit_job_id),
+        "status": "pending",
+    }
+    assert enqueue_calls == [
+        (
+            source_id,
+            str(audit_job_id),
+            f"source-sync:{source_id}:{audit_job_id}",
+        )
+    ]
+
+    async with AsyncSessionLocal() as session:
+        job = await session.get(AuditJob, audit_job_id)
+        assert job is not None
+        assert job.status == "pending"
+        assert job.triggered_by == f"source_sync:{source_id}"
+
+
+async def test_sync_source_endpoint_marks_job_failed_when_enqueue_fails(
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "github_token", "token")
+
+    async def fake_enqueue_ingest_task(**_kwargs):
+        raise QueueEnqueueError("queue unavailable")
+
+    monkeypatch.setattr(
+        sources_api_module,
+        "enqueue_ingest_task",
+        fake_enqueue_ingest_task,
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        create_source_response = await client.post(
+            "/v1/sources",
+            json={
+                "name": "Queue Failure",
+                "type": "git",
+                "config": {"repo_url": "https://github.com/acme/runbooks"},
+            },
+            headers=TEST_HEADERS,
+        )
+        assert create_source_response.status_code == 201
+        source_id = create_source_response.json()["id"]
+
+        sync_response = await client.post(
+            f"/v1/sources/{source_id}/sync",
+            headers=TEST_HEADERS,
+        )
+
+    assert sync_response.status_code == 503
+    assert sync_response.json()["detail"] == "Failed to enqueue source sync"
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(AuditJob))
+        job = result.scalars().one()
+        assert job.status == "failed"
+        assert job.error == "Failed to enqueue source sync"
+        assert job.triggered_by == f"source_sync:{source_id}"
+
+
 async def test_sources_endpoints_require_api_key():
     async with AsyncClient(
         transport=ASGITransport(app=app),
@@ -128,9 +233,11 @@ async def test_sources_endpoints_require_api_key():
                 "config": {"repo_url": "https://github.com/acme/runbooks"},
             },
         )
+        sync_response = await client.post(f"/v1/sources/{uuid.uuid4()}/sync")
 
     assert list_response.status_code == 401
     assert create_response.status_code == 401
+    assert sync_response.status_code == 401
 
 
 async def test_sources_list_validates_pagination_bounds():

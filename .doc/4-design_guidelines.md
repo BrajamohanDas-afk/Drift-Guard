@@ -1,6 +1,6 @@
 # Drift Guard - Design Guidelines
 
-> UPDATED 2026-03-30: These guidelines now separate enforced current behavior from target architecture so the docs do not overstate what the code already does.
+> UPDATED 2026-05-02: These guidelines separate enforced current behavior from target architecture and include the implemented audit report APIs.
 
 ## Core Principles
 
@@ -55,7 +55,8 @@ The live API is mixed right now:
 
 - list endpoints use `data` plus `meta`
 - singular document and source creation responses return direct resource models
-- source sync returns a custom `data` payload
+- source sync returns `202` with a custom `data` payload containing `audit_job_id`
+- audit reports return direct JSON summary models
 
 Do not document a uniform envelope as if it already exists. If the team wants one response shape later, treat it as an explicit API refactor.
 
@@ -69,10 +70,11 @@ Current enforced behavior:
 
 - document routes require `X-API-Key`
 - source routes require `X-API-Key`
+- alert, score, and audit routes require `X-API-Key`
 
 Future rule:
 
-- when alerts, scores, and audit endpoints are implemented, they should use the same API key dependency unless the auth model is upgraded across the app in one coordinated change
+- new `/v1` endpoints should use the same API key dependency unless the auth model is upgraded across the app in one coordinated change
 
 ### Status Codes
 
@@ -85,8 +87,7 @@ Use:
 - `401` for missing or invalid API key
 - `404` for missing resources
 
-Current behavior: source sync executes inline and returns `200`.
-Future async behavior (background jobs + `audit_job_id`) should use `202`.
+Current behavior: source sync enqueues background work and returns `202` with `audit_job_id`.
 
 ## Data Modeling Rules
 
@@ -151,23 +152,29 @@ These are target rules, not current implementation:
 
 ## Scoring Rules
 
-Scoring is still future work, but the intended contract is:
+Current implemented scoring contract:
 
 - calculate a per-document reliability score
 - store the numeric result plus structured breakdown
 - expose both summary and per-document detail through the API
 
-Do not mark scoring complete until those three parts all exist.
+Keep future audit/reporting work aligned with this persisted score snapshot model.
 
-## Job Design Rules
+## Job And Report Design Rules
 
-The repo already has worker files and an `AuditJob` model, but not a real job system.
+The repo now has an ARQ worker runtime, queue helpers, and an `AuditJob` lifecycle service.
 
-When jobs are implemented:
+For job-backed routes:
 
 - use `AuditJob` as the source of truth for execution status
 - return real job ids from async endpoints
 - keep audit runs resumable or at least inspectable after failure
+
+For audit reports:
+
+- use latest persisted score snapshots instead of recalculating scores during report reads
+- keep deleted documents out of document-backed report totals
+- support both explicit `Document.service_name` and latest extracted `service` entities for service-scoped reports
 
 ## Documentation Rules
 

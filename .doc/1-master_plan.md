@@ -1,6 +1,8 @@
 # Drift Guard - Master Plan
 
-> UPDATED 2026-03-30: Reconciled against the current repository state. This file now reflects what is implemented today, what is still missing, and what should be built next.
+> UPDATED 2026-04-18: Reconciled against the current repository state and updated with a strict 0 Rs execution policy for Phases 7-9.
+>
+> UPDATED 2026-05-02: Tracked audit run/job APIs, source sync background handoff, and audit report endpoints are implemented on the ARQ worker foundation.
 
 ## Vision
 
@@ -20,14 +22,19 @@ The repository is no longer in planning-only state. The current codebase already
 
 - FastAPI application bootstrap with `/health`
 - PostgreSQL-backed SQLAlchemy models and Alembic migrations
-- API key protection on the active document and source routes
+- API key protection on documents, sources, alerts, and scores routes
 - direct Markdown upload with versioning and soft delete
 - GitHub-backed Git source creation, listing, and sync
 - Markdown normalization before persistence
 - entity extraction for `url`, `dashboard`, `service`, `owner`, `command`, `env_var`, `iam_role`, `helm_chart`, and `cluster`
 - evidence collectors for GitHub, HTTP probe, incident.io, and Kubernetes
 - drift rule engine with alert persistence and alert APIs
-- unit tests for extractors and integration tests for health, documents, and source sync
+- scoring service with score snapshot persistence
+- score APIs for list and document-level retrieval
+- local/self-hosted ARQ worker runtime with tracked `AuditJob` lifecycle
+- audit job APIs for manual run creation, job listing, and job detail polling
+- audit report APIs for global and service-scoped summaries
+- unit tests for extractors and scoring, plus integration tests for health, documents, sources, alerts, and scores
 
 ## What Is Done
 
@@ -71,24 +78,38 @@ The repository is no longer in planning-only state. The current codebase already
 
 These planned product areas are still mostly unimplemented:
 
-- scoring service and score APIs
-- audit execution APIs and real `AuditJob` lifecycle
-- background workers and scheduling
 - Slack/email/webhook notification delivery
 - rate limiting, request logging, CI pipeline, and other hardening work
 
-`scores` and `audit` routers are still placeholders today.
+`audit` now supports tracked run/job endpoints plus global and service-scoped report endpoints.
+
+## Zero-Rupee Delivery Constraint (Phases 7-9)
+
+Phases 7, 8, and 9 must be implemented with strict 0 Rs recurring spend.
+
+Allowed:
+
+- existing Docker Compose services (app, Postgres, Redis)
+- open-source libraries and frameworks
+- self-hosted scheduling and worker processes
+- free Slack incoming webhook integration
+- local/test email sink for notification validation
+
+Not allowed:
+
+- paid managed queue/scheduler services
+- paid email providers for this phase
+- paid SaaS monitoring dependencies as a requirement
 
 ## Recommended Next Step
 
-The next meaningful phase is to move from "ingest and extract" to "evaluate and report".
+The next meaningful phase is to move from "evaluate and report" to "orchestrate and operate".
 
 Recommended order:
 
-1. Add scoring and expose `GET /v1/scores`.
-2. Implement audit APIs and tracked background jobs.
-3. Convert source sync and audit execution into tracked background jobs backed by `AuditJob`.
-4. Add notification delivery only after alerts and scoring are trustworthy.
+1. Implement Phase 8 notifications using free-only delivery modes.
+2. Implement Phase 9 hardening using open-source/self-hosted paths only.
+3. Keep running the full integration suite against local Docker/Postgres for regression checks.
 
 ## Practical MVP Status
 
@@ -98,21 +119,26 @@ Recommended order:
 - version tracking
 - entity extraction
 - evidence collection foundation
+- drift rules and alerts APIs
+- scoring service and score APIs
 - source sync
-- tests for the implemented ingestion path
+- tracked audit run and job polling APIs
+- background source sync handoff with non-null `audit_job_id`
+- global and service-scoped audit report APIs
+- tests for ingestion, alert, and scoring slices
 
 ### Current milestone
 
-Alert persistence and alert APIs are implemented, but full ingest/sync-to-alert integration coverage is still pending.
+Alert, scoring, worker runtime, tracked audit job APIs, source sync background handoff, and audit report APIs are implemented.
 
 ## Success Criteria For The Next Milestone
 
 The next milestone should only be considered complete when the repository can:
 
-- sync documents from a Git source
-- extract entities from those documents
-- run at least one real rule against collected evidence
-- persist generated alerts
-- expose alert results through tested API endpoints
+- trigger a tracked audit run asynchronously
+- expose audit job lifecycle endpoints with reliable status transitions
+- expose global and service-scoped audit report summaries
+- run nightly scan scheduling from local/self-hosted worker runtime
+- keep notification and hardening features within the 0 Rs constraint
 
-Until that exists, the project should be described as "document ingestion and extraction foundation complete" rather than "drift detection complete".
+The project can now be described as "drift detection, scoring, tracked audit jobs, background source sync, and audit reports implemented; notifications and hardening pending".

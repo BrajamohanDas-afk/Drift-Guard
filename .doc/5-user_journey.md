@@ -1,6 +1,6 @@
 # Drift Guard - User Journeys
 
-> UPDATED 2026-03-30: These journeys now match the features that actually exist in the repository today. Future journeys are called out separately.
+> UPDATED 2026-05-02: These journeys now include tracked source sync and audit report APIs. Future journeys are called out separately.
 
 ## Personas
 
@@ -14,7 +14,7 @@ Uploads runbooks directly and expects entities to be extracted correctly.
 
 ### Jordan - Engineering Manager
 
-Will care about scores and reports later, but those flows are not implemented yet.
+Reviews score and audit report summaries to understand runbook reliability by service.
 
 ## Journey 1 - First Local Bring-Up
 
@@ -124,16 +124,24 @@ Header: X-API-Key: <api-key>
 
 3. Drift Guard:
 
+- creates a pending `AuditJob`
+- returns `202` with a non-null `audit_job_id`
+- runs the sync in the worker
 - fetches Markdown files recursively from GitHub
 - identifies source-backed documents by `source_id + path`
 - creates or updates `document_versions`
 - extracts entities for each changed file
 
-4. Review the sync summary returned by the endpoint.
+4. Poll the audit job detail endpoint.
+
+```http
+GET /v1/audit/jobs/{audit_job_id}
+Header: X-API-Key: <api-key>
+```
 
 ### Outcome
 
-Sam can ingest a repository of Markdown runbooks without collapsing same-named files from different folders into the same document.
+Sam can trigger a tracked repository sync without collapsing same-named files from different folders into the same document.
 
 ## Journey 4 - Remove A Document From Active Listings
 
@@ -196,13 +204,42 @@ Header: X-API-Key: <api-key>
 
 Engineers can close acknowledged drift findings while preserving audit history.
 
+## Journey 6 - Review Audit Report Summaries
+
+**Goal:** inspect current documentation health globally or for one service.
+
+### Steps
+
+1. Request the global report.
+
+```http
+GET /v1/audit/report
+Header: X-API-Key: <api-key>
+```
+
+2. Drift Guard returns:
+
+- the latest audit job
+- active document totals
+- unresolved alert counts by severity
+- latest score summary
+- lowest-scoring documents
+
+3. Request a service-scoped report.
+
+```http
+GET /v1/audit/service/{service_name}
+Header: X-API-Key: <api-key>
+```
+
+### Outcome
+
+Jordan can see whether documentation reliability is improving overall and which service runbooks need attention first.
+
 ## Future Journeys - Not Implemented Yet
 
 The following product journeys are still planned only:
 
-- reading per-document reliability scores
-- triggering tracked audit jobs
-- consuming JSON audit reports
 - receiving Slack or email notifications
 - blocking CI on low runbook reliability
 

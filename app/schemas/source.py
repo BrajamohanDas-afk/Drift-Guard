@@ -1,7 +1,11 @@
 import datetime
 import uuid
 from typing import List, Literal, Optional
+
 from pydantic import BaseModel, ConfigDict
+
+from app.schemas.audit_job import AuditJobStatus
+
 
 class GitSourceConfig(BaseModel):
     repo_url: str
@@ -25,3 +29,15 @@ class SourceResponse(BaseModel):
 class SourceListResponse(BaseModel):
     data: List[SourceResponse]
     meta: dict
+
+
+class SourceSyncData(BaseModel):
+    audit_job_id: uuid.UUID
+    status: AuditJobStatus
+    documents_seen: Optional[int] = None
+    documents_created: Optional[int] = None
+    versions_created: Optional[int] = None
+
+
+class SourceSyncResponse(BaseModel):
+    data: SourceSyncData
