@@ -14,6 +14,7 @@ from app.services.audit.audit_job_service import (
     mark_audit_job_failed,
     mark_audit_job_running,
 )
+from app.services.audit.audit_scan_service import scan_all_documents
 from app.services.ingestion.source_sync_service import sync_source_by_id
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,9 @@ async def audit_run_task(
     documents_seen = 0
     documents_created = 0
     versions_created = 0
+    alerts_created = 0
+    alerts_resolved = 0
+    scores_refreshed = 0
 
     try:
         async with AsyncSessionLocal() as session:
@@ -53,12 +57,18 @@ async def audit_run_task(
                 documents_seen += sync_result.documents_seen
                 documents_created += sync_result.documents_created
                 versions_created += sync_result.versions_created
-                await increment_audit_job_progress(
-                    session,
-                    audit_job_id=audit_job_uuid,
-                    docs_scanned_delta=sync_result.documents_seen,
-                    alerts_created_delta=0,
-                )
+
+            scan_result = await scan_all_documents(session)
+            documents_seen = scan_result.documents_scanned
+            alerts_created = scan_result.alerts_created
+            alerts_resolved = scan_result.alerts_resolved
+            scores_refreshed = scan_result.scores_refreshed
+            await increment_audit_job_progress(
+                session,
+                audit_job_id=audit_job_uuid,
+                docs_scanned_delta=scan_result.documents_scanned,
+                alerts_created_delta=scan_result.alerts_created,
+            )
 
             await mark_audit_job_completed(session, audit_job_id=audit_job_uuid)
     except Exception:
@@ -79,6 +89,9 @@ async def audit_run_task(
         "documents_seen": documents_seen,
         "documents_created": documents_created,
         "versions_created": versions_created,
+        "alerts_created": alerts_created,
+        "alerts_resolved": alerts_resolved,
+        "scores_refreshed": scores_refreshed,
     }
     logger.info("audit_run_task completed", extra=payload)
     return payload
@@ -92,6 +105,9 @@ def _completed_job_payload(audit_job_id: str, job: AuditJob) -> dict[str, Any]:
         "documents_seen": job.docs_scanned or 0,
         "documents_created": 0,
         "versions_created": 0,
+        "alerts_created": job.alerts_created or 0,
+        "alerts_resolved": 0,
+        "scores_refreshed": 0,
         "already_completed": True,
     }
 

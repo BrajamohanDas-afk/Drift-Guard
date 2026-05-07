@@ -20,7 +20,7 @@ class AuditJobResponse(BaseModel):
 
     id: uuid.UUID
     triggered_by: Optional[str] = None
-    status: Optional[str] = None
+    status: AuditJobStatus = "pending"
     docs_scanned: Optional[int] = None
     alerts_created: Optional[int] = None
     started_at: Optional[datetime.datetime] = None

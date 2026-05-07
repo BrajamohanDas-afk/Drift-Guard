@@ -1,25 +1,96 @@
 import datetime
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies.auth import require_api_key
+from app.dependencies.rate_limit import require_heavy_endpoint_rate_limit
 from app.models.document import Document
 from app.schemas.document import DocumentListResponse, DocumentResponse
 from app.services.ingestion.document_ingestion_service import upsert_document
 
 router = APIRouter(dependencies=[Depends(require_api_key)])
 MAX_UPLOAD_BYTES = 1024 * 1024
+MAX_DIRECT_UPLOAD_IDENTITY_LENGTH = 512
+MARKDOWN_EXTENSIONS = {".md", ".markdown"}
+MARKDOWN_CONTENT_TYPES = {
+    "application/octet-stream",
+    "text/markdown",
+    "text/plain",
+    "text/x-markdown",
+}
 
 
-@router.post("/upload", status_code=201, response_model=DocumentResponse)
+def _normalized_upload_filename(filename: str | None) -> str:
+    normalized = (filename or "").replace("\\", "/").rsplit("/", 1)[-1].strip()
+    return normalized or "untitled.md"
+
+
+def _has_markdown_extension(filename: str) -> bool:
+    return any(
+        filename.lower().endswith(extension)
+        for extension in MARKDOWN_EXTENSIONS
+    )
+
+
+def _validate_markdown_upload(filename: str, content_type: str | None) -> None:
+    normalized_content_type = (content_type or "").split(";", 1)[0].strip().lower()
+    if (
+        not _has_markdown_extension(filename)
+        and normalized_content_type not in MARKDOWN_CONTENT_TYPES
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Uploaded file must be Markdown",
+        )
+
+
+def _direct_upload_identity(filename: str, document_key: str | None) -> str:
+    raw_identity = document_key if document_key is not None else filename
+    identity = raw_identity.strip().replace("\\", "/").strip("/")
+
+    if not identity:
+        raise HTTPException(
+            status_code=400,
+            detail="document_key must not be blank",
+        )
+    if len(identity) > MAX_DIRECT_UPLOAD_IDENTITY_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail="document_key is too long",
+        )
+    if "?" in identity or "#" in identity:
+        raise HTTPException(
+            status_code=400,
+            detail="document_key must be a relative path-like identifier",
+        )
+    if any(part in {"", ".", ".."} for part in identity.split("/")):
+        raise HTTPException(
+            status_code=400,
+            detail="document_key must be a relative path-like identifier",
+        )
+
+    return identity
+
+
+@router.post(
+    "/upload",
+    status_code=201,
+    response_model=DocumentResponse,
+    dependencies=[Depends(require_heavy_endpoint_rate_limit)],
+)
 async def upload_document(
     file: UploadFile = File(...),
+    document_key: str | None = Form(default=None),
     db: AsyncSession = Depends(get_db),
 ):
+    filename = _normalized_upload_filename(file.filename)
+    _validate_markdown_upload(filename, file.content_type)
+    upload_identity = _direct_upload_identity(filename, document_key)
+
     content = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(content) > MAX_UPLOAD_BYTES:
         raise HTTPException(
@@ -37,10 +108,10 @@ async def upload_document(
     try:
         result = await upsert_document(
             db,
-            title=file.filename or "untitled.md",
+            title=filename,
             raw_text=raw_text,
             source_id=None,
-            path=None,
+            path=upload_identity,
         )
         await db.commit()
         await db.refresh(result.document)

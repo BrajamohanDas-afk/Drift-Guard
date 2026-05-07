@@ -15,11 +15,18 @@ from app.models.document_version import DocumentVersion
 from app.models.entity import Entity
 from app.models.runbook_score import RunbookScore
 from app.services.audit.audit_job_service import create_audit_job
+from app.services.audit.audit_scan_service import AuditScanService
+from app.services.evidence.http_collector import HttpProbeResult
 from app.workers.queue import QueueEnqueueError
 
 audit_api_module = importlib.import_module("app.api.v1.audit")
 
 TEST_HEADERS = {"x-api-key": settings.api_key}
+
+
+class FakeHttpCollector:
+    async def collect(self, url: str) -> HttpProbeResult:
+        return HttpProbeResult(url=url, status_code=404, error=None)
 
 
 async def test_run_audit_creates_job_and_enqueues_worker(
@@ -318,6 +325,99 @@ async def test_audit_report_returns_global_summary():
         payments_doc.id
     )
     assert payload["lowest_scoring_documents"][0]["score"] == 80.0
+
+
+async def test_audit_scan_evaluates_rules_reconciles_alerts_and_scores():
+    async with AsyncSessionLocal() as session:
+        dashboard_doc = Document(title="dashboard.md")
+        fixed_doc = Document(title="fixed-owner.md")
+        session.add_all([dashboard_doc, fixed_doc])
+        await session.flush()
+
+        dashboard_version = DocumentVersion(
+            document_id=dashboard_doc.id,
+            raw_content="# Dashboard",
+            normalized_content="# Dashboard",
+            content_hash="dashboard-hash",
+            version_number=1,
+        )
+        fixed_version = DocumentVersion(
+            document_id=fixed_doc.id,
+            raw_content="# Fixed Owner",
+            normalized_content="# Fixed Owner",
+            content_hash="fixed-owner-hash",
+            version_number=1,
+        )
+        session.add_all([dashboard_version, fixed_version])
+        await session.flush()
+        dashboard_doc.latest_version_id = dashboard_version.id
+        fixed_doc.latest_version_id = fixed_version.id
+
+        session.add_all(
+            [
+                Entity(
+                    document_id=dashboard_doc.id,
+                    document_version_id=dashboard_version.id,
+                    entity_type="dashboard",
+                    value="https://example.com/d/missing",
+                    context="dashboard",
+                ),
+                Entity(
+                    document_id=fixed_doc.id,
+                    document_version_id=fixed_version.id,
+                    entity_type="owner",
+                    value="@platform",
+                    context="owner",
+                ),
+                Entity(
+                    document_id=fixed_doc.id,
+                    document_version_id=fixed_version.id,
+                    entity_type="service",
+                    value="platform-api",
+                    context="service",
+                ),
+                Alert(
+                    document_id=fixed_doc.id,
+                    rule_type="owner_missing",
+                    severity="high",
+                    message="Owner is missing from runbook metadata",
+                    evidence={"missing_entity_type": "owner"},
+                    resolved=False,
+                ),
+            ]
+        )
+        await session.commit()
+
+        result = await AuditScanService(
+            http_collector=FakeHttpCollector(),
+        ).scan_all_documents(session)
+
+        assert result.documents_scanned == 2
+        assert result.alerts_created == 2
+        assert result.alerts_resolved == 1
+        assert result.scores_refreshed == 2
+
+        alerts_result = await session.execute(
+            select(Alert).order_by(Alert.rule_type.asc(), Alert.created_at.asc())
+        )
+        alerts = list(alerts_result.scalars().all())
+        unresolved = [alert for alert in alerts if not alert.resolved]
+        resolved = [alert for alert in alerts if alert.resolved]
+
+        assert {alert.rule_type for alert in unresolved} == {
+            "dashboard_dead",
+            "owner_missing",
+        }
+        assert len(resolved) == 1
+        assert resolved[0].document_id == fixed_doc.id
+
+        latest_score_result = await session.execute(
+            select(RunbookScore.document_id).distinct()
+        )
+        assert set(latest_score_result.scalars().all()) == {
+            dashboard_doc.id,
+            fixed_doc.id,
+        }
 
 
 async def test_service_audit_report_filters_by_latest_service_entity_and_auth():

@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies.auth import require_api_key
+from app.dependencies.rate_limit import require_heavy_endpoint_rate_limit
 from app.models.audit_job import AuditJob
 from app.schemas.audit_job import (
     AuditJobListResponse,
@@ -35,6 +36,7 @@ audit_report_service = AuditReportService()
     "/run",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=AuditJobResponse,
+    dependencies=[Depends(require_heavy_endpoint_rate_limit)],
 )
 async def run_audit(
     request: AuditRunRequest | None = Body(default=None),

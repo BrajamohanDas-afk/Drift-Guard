@@ -32,7 +32,7 @@ async def _acquire_document_lock(
     path: str | None,
 ) -> None:
     if source_id is None:
-        lock_id = _stable_lock_id("document_upsert", "standalone", title)
+        lock_id = _stable_lock_id("document_upsert", "standalone", path or title)
     else:
         if not path:
             raise ValueError("path is required for source-backed documents")
@@ -62,10 +62,14 @@ async def find_existing_document(
     query = select(Document).where(Document.is_deleted.is_(False))
 
     if source_id is None:
-        query = query.where(
-            Document.title == title,
-            Document.source_id.is_(None),
-        )
+        query = query.where(Document.source_id.is_(None))
+        if path is None:
+            query = query.where(
+                Document.title == title,
+                Document.path.is_(None),
+            )
+        else:
+            query = query.where(Document.path == path)
     else:
         if not path:
             raise ValueError("path is required for source-backed documents")
@@ -114,9 +118,9 @@ async def upsert_document(
         created_document = True
     else:
         doc.title = title
+        doc.path = path
         if source_id is not None:
             doc.source_id = source_id
-            doc.path = path
 
     await _acquire_version_lock(db, document_id=doc.id)
 

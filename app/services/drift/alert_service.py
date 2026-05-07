@@ -3,6 +3,7 @@ import hashlib
 import json
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import date, time
 
 from sqlalchemy import Select, func, select, update
@@ -13,6 +14,12 @@ from app.services.drift.rules.base import DriftAlertDraft
 from app.services.scoring.scoring_service import ScoringService
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class AlertRuleRunPersistenceResult:
+    created: list[Alert]
+    resolved: list[Alert]
 
 
 class AlertService:
@@ -62,6 +69,15 @@ class AlertService:
             str(draft.document_id),
             draft.message,
             self._evidence_fingerprint(draft.evidence),
+        )
+
+    def _alert_dedup_key(self, alert: Alert) -> tuple[str, str, str, str, str]:
+        return (
+            alert.rule_type,
+            alert.severity,
+            str(alert.document_id),
+            alert.message,
+            self._evidence_fingerprint(alert.evidence),
         )
 
     async def _acquire_dedup_lock(
@@ -144,6 +160,74 @@ class AlertService:
         if changed_document_ids:
             await self._refresh_document_scores(db, document_ids=changed_document_ids)
         return created
+
+    async def persist_alerts_for_rule_run(
+        self,
+        db: AsyncSession,
+        alerts: list[DriftAlertDraft],
+        *,
+        document_id: uuid.UUID | None,
+        rule_types: set[str],
+    ) -> AlertRuleRunPersistenceResult:
+        created = await self.persist_alerts(db, alerts)
+        resolved = await self.reconcile_stale_alerts(
+            db,
+            current_alerts=alerts,
+            document_id=document_id,
+            rule_types=rule_types,
+        )
+        return AlertRuleRunPersistenceResult(created=created, resolved=resolved)
+
+    async def reconcile_stale_alerts(
+        self,
+        db: AsyncSession,
+        *,
+        current_alerts: list[DriftAlertDraft],
+        document_id: uuid.UUID | None,
+        rule_types: set[str],
+    ) -> list[Alert]:
+        if not rule_types:
+            return []
+
+        current_keys = {
+            self._dedup_key(draft)
+            for draft in current_alerts
+            if draft.document_id == document_id and draft.rule_type in rule_types
+        }
+
+        query: Select[tuple[Alert]] = select(Alert).where(
+            Alert.resolved.is_(False),
+            Alert.rule_type.in_(sorted(rule_types)),
+        )
+        if document_id is None:
+            query = query.where(Alert.document_id.is_(None))
+        else:
+            query = query.where(Alert.document_id == document_id)
+
+        result = await db.execute(query)
+        unresolved_alerts = list(result.scalars().all())
+        resolved_at = datetime.datetime.now(datetime.timezone.utc)
+        stale_alerts = [
+            alert
+            for alert in unresolved_alerts
+            if self._alert_dedup_key(alert) not in current_keys
+        ]
+        if not stale_alerts:
+            return []
+
+        changed_document_ids: set[uuid.UUID] = set()
+        for alert in stale_alerts:
+            alert.resolved = True
+            alert.resolved_at = resolved_at
+            if alert.document_id is not None:
+                changed_document_ids.add(alert.document_id)
+
+        await db.commit()
+        for alert in stale_alerts:
+            await db.refresh(alert)
+        if changed_document_ids:
+            await self._refresh_document_scores(db, document_ids=changed_document_ids)
+        return stale_alerts
 
     async def list_alerts(
         self,
@@ -229,7 +313,8 @@ class AlertService:
             try:
                 await self._scoring_service.score_document(db, document_id=document_id)
             except Exception as exc:
-                # Alert writes are committed before score refresh; keep refresh best-effort.
+                # Alert writes are committed before score refresh; keep refresh
+                # best-effort.
                 await db.rollback()
                 logger.warning(
                     "Score refresh failed for document %s after alert write; "

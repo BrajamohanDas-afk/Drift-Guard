@@ -6,7 +6,6 @@ from pydantic import BaseModel, Field
 
 from app.config import settings
 
-
 INCIDENTIO_API_BASE = "https://api.incident.io"
 
 
@@ -29,7 +28,9 @@ class IncidentIOCollector:
         catalog_type_id: Optional[str] = None,
         timeout_seconds: float = 5.0,
     ):
-        self.api_token = settings.incidentio_api_token if api_token is None else api_token
+        self.api_token = (
+            settings.incidentio_api_token if api_token is None else api_token
+        )
         self.catalog_type_id = (
             settings.incidentio_catalog_type_id
             if catalog_type_id is None
@@ -154,11 +155,17 @@ class IncidentIOCollector:
                         return IncidentIOServiceEvidence(
                             query=service_name,
                             exists=False,
-                            error="Invalid incident.io response shape: catalog_entries must be a list",
+                            error=(
+                                "Invalid incident.io response shape: "
+                                "catalog_entries must be a list"
+                            ),
                             checked_at=checked_at,
                         )
 
-                    exact_match = self._find_exact_or_alias_match(entries, normalized_name)
+                    exact_match = self._find_exact_or_alias_match(
+                        entries,
+                        normalized_name,
+                    )
                     if exact_match is not None:
                         aliases = [
                             alias

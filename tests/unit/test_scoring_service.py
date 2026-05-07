@@ -97,6 +97,10 @@ def _make_entity(
     )
 
 
+def _compiled_sql(query) -> str:
+    return str(query.compile(compile_kwargs={"literal_binds": True})).lower()
+
+
 def test_calculate_breakdown_applies_alert_deductions():
     service = ScoringService()
     document_id = uuid.uuid4()
@@ -235,6 +239,23 @@ async def test_compute_score_inputs_fetches_alerts_and_latest_entities():
 
 
 @pytest.mark.asyncio
+async def test_compute_score_inputs_rejects_deleted_document():
+    service = ScoringService()
+    document_id = uuid.uuid4()
+    document = Document(
+        id=document_id,
+        title="deleted runbook",
+        is_deleted=True,
+    )
+    session = _FakeAsyncSession(get_results={(Document, document_id): document})
+
+    with pytest.raises(ValueError, match="Document not found"):
+        await service.compute_score_inputs(session, document_id=document_id)
+
+    assert session.executed_queries == []
+
+
+@pytest.mark.asyncio
 async def test_persist_score_snapshot_rounds_and_persists():
     service = ScoringService()
     document_id = uuid.uuid4()
@@ -282,6 +303,9 @@ async def test_get_latest_score_returns_latest_score():
 
     assert result is latest
     assert len(session.executed_queries) == 1
+    compiled = _compiled_sql(session.executed_queries[0])
+    assert "join documents" in compiled
+    assert "documents.is_deleted is false" in compiled
 
 
 @pytest.mark.asyncio
@@ -312,6 +336,9 @@ async def test_list_latest_scores_per_document_returns_latest_rows():
 
     assert result == latest_scores
     assert len(session.executed_queries) == 1
+    compiled = _compiled_sql(session.executed_queries[0])
+    assert "join documents" in compiled
+    assert "documents.is_deleted is false" in compiled
 
 
 @pytest.mark.asyncio
@@ -343,6 +370,12 @@ async def test_list_latest_scores_per_document_paginated_returns_page_and_total(
     assert scores == paged_scores
     assert total == 3
     assert len(session.executed_queries) == 2
+    compiled_count = _compiled_sql(session.executed_queries[0])
+    compiled_list = _compiled_sql(session.executed_queries[1])
+    assert "join documents" in compiled_count
+    assert "join documents" in compiled_list
+    assert "documents.is_deleted is false" in compiled_count
+    assert "documents.is_deleted is false" in compiled_list
 
 
 @pytest.mark.asyncio

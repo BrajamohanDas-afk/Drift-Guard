@@ -2,6 +2,7 @@ import pytest
 
 from app.workers.common import WORKER_QUEUE_NAME
 from app.workers.queue import (
+    QueueCapacityError,
     QueueEnqueueError,
     enqueue_audit_run_task,
     enqueue_ingest_task,
@@ -18,9 +19,16 @@ def reset_db_state():
 
 
 class _FakeRedis:
-    def __init__(self, *, fail_enqueue: bool = False, fail_close: bool = False):
+    def __init__(
+        self,
+        *,
+        fail_enqueue: bool = False,
+        fail_close: bool = False,
+        queue_depth: int = 0,
+    ):
         self.fail_enqueue = fail_enqueue
         self.fail_close = fail_close
+        self.queue_depth = queue_depth
         self.enqueue_calls = []
         self.closed = False
         self.close_connection_pool = None
@@ -31,6 +39,9 @@ class _FakeRedis:
         if self.fail_enqueue:
             raise RuntimeError("enqueue failed")
         return self.job
+
+    async def zcard(self, _queue_name):
+        return self.queue_depth
 
     async def close(self, *, close_connection_pool: bool):
         if self.fail_close:
@@ -153,6 +164,19 @@ async def test_enqueue_wraps_errors_in_queue_enqueue_error(
         await enqueue_ingest_task(source_id="source-1")
 
     assert fake_redis.closed is True
+
+
+@pytest.mark.asyncio
+async def test_enqueue_rejects_when_worker_queue_is_at_capacity(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    fake_redis = _FakeRedis(queue_depth=10)
+    monkeypatch.setattr("app.workers.queue.settings.worker_queue_max_depth", 10)
+
+    with pytest.raises(QueueCapacityError, match="worker queue is at capacity"):
+        await enqueue_ingest_task(source_id="source-1", redis=fake_redis)
+
+    assert fake_redis.enqueue_calls == []
 
 
 @pytest.mark.asyncio

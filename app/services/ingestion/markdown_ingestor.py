@@ -1,5 +1,7 @@
-import markdown
 import re
+
+import markdown
+
 
 def strip_markdown(text: str) -> str:
     # convert markdown to html

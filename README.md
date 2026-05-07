@@ -43,6 +43,11 @@ The current repository includes:
 - entity extraction pipeline
 - drift rules plus alert persistence APIs
 - alert list/detail/resolve APIs
+- scoring APIs with deleted-document filtering
+- audit job APIs and audit report summaries
+- ARQ worker tasks for source sync, audit runs, scoring, and nightly scans
+- API-key auth for `/v1/*` routes
+- rate limits for heavy endpoints and worker queue capacity guards
 - integration and unit tests
 - Docker Compose for local Postgres and Redis
 
@@ -72,10 +77,21 @@ Extracted entity types currently include:
 - `iam_role`
 - `helm_chart`
 - `cluster`
+- `dependency`
 
 ## Run The App
 
 This project is currently easiest to run with Docker for services and the app container.
+
+Copy the Docker example env first:
+
+```powershell
+Copy-Item .env.docker.example .env
+```
+
+Replace `SECRET_KEY`, `API_KEY`, `REDIS_PASSWORD`, and any shared-environment
+tokens before running outside your local machine. Known placeholder values such
+as `change-me` are rejected at startup.
 
 ### 1. Start the app and dependencies
 
@@ -85,7 +101,7 @@ docker compose up -d --build app postgres redis
 
 ### 2. Run migrations inside Docker
 
-This repo's current `.env` is Docker-oriented, so run Alembic inside the app container:
+When using `.env.docker.example`, run Alembic inside the app container:
 
 ```powershell
 docker compose exec app uv run alembic upgrade head
@@ -115,6 +131,13 @@ Notes:
 
 - Pure unit tests under `tests/unit` can run without Docker services.
 - Integration tests under `tests/integration` require Postgres (Docker recommended).
+- Host-side commands should copy `.env.local.example` to `.env`, or set
+  `DATABASE_URL`/`ALEMBIC_DATABASE_URL` to the `localhost:5433` values shown
+  there.
+- The integration fixture refuses to truncate a database unless the database name
+  contains `test`.
+- Host-side integration runs should point `DATABASE_URL` at a disposable test
+  database, for example the `driftguard_test` URLs shown in `.env.local.example`.
 
 If you want to run a focused subset:
 
@@ -133,6 +156,13 @@ Phase 4 evidence collectors support optional external integrations:
 
 Important behavior:
 
+- `DATABASE_URL` uses `postgres:5432` inside Docker and `localhost:5433` from
+  the host.
+- Redis requires a password in Docker Compose. The example files use a local-only
+  password and bind Redis/Postgres to `127.0.0.1`.
+- `SECRET_KEY` and `API_KEY` must be non-placeholder values.
+- `/docs`, `/redoc`, and `/openapi.json` are enabled by default for local
+  development. Set `PUBLIC_API_DOCS_ENABLED=false` in production.
 - incident.io and Kubernetes tokens are optional for local development.
 - If `INCIDENTIO_API_TOKEN` is not set, the collector returns a structured
   "not configured" evidence error instead of crashing.
@@ -149,11 +179,20 @@ Current routers are mounted under `app/api/v1/`:
 - `/v1/scores`
 - `/v1/audit`
 
+Authentication:
+
+- All `/v1/*` routes require the `x-api-key` header.
+- `GET /health` remains public for local health checks.
+
 Status notes:
 
-- `/v1/alerts` is implemented.
-- End-to-end ingest/sync -> rule execution -> alert creation still needs dedicated integration coverage.
-- `/v1/scores` and `/v1/audit` are still placeholders for future phases.
+- `/v1/documents`, `/v1/sources`, `/v1/alerts`, `/v1/scores`, and `/v1/audit`
+  are implemented.
+- Source sync and audit run endpoints enqueue worker jobs through Redis/ARQ.
+- Audit runs sync sources, collect supported evidence, evaluate drift rules,
+  persist/reconcile alerts, refresh scores, and update audit job counters.
+- Heavy endpoints are rate-limited per API key and worker enqueue checks queue
+  depth before accepting new work.
 
 Useful endpoints include:
 
@@ -168,6 +207,33 @@ Useful endpoints include:
 - `GET /v1/alerts`
 - `GET /v1/alerts/{id}`
 - `PATCH /v1/alerts/{id}/resolve`
+- `GET /v1/scores`
+- `GET /v1/scores/{document_id}`
+- `POST /v1/audit/run`
+- `GET /v1/audit/jobs`
+- `GET /v1/audit/jobs/{audit_job_id}`
+- `GET /v1/audit/report`
+- `GET /v1/audit/service/{service_name}`
+
+Example authenticated request:
+
+```powershell
+curl -H "x-api-key: <your-api-key>" http://localhost:8000/v1/documents
+```
+
+## Worker Notes
+
+The app uses Redis and ARQ for asynchronous work:
+
+- `ingest_task` syncs Git-backed sources and persists document versions.
+- `audit_run_task` syncs sources, runs drift detection, reconciles alerts, and
+  refreshes scores.
+- `score_task` refreshes a document score snapshot.
+- `nightly_scan` enqueues source sync jobs on a cron schedule when enabled.
+
+The API returns `202` for queued source sync and audit run requests. If Redis is
+unavailable or the queue is over the configured capacity, the API marks the audit
+job failed and returns a service error.
 
 ## Tech Stack
 

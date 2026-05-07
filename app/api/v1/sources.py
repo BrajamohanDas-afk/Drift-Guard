@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies.auth import require_api_key
+from app.dependencies.rate_limit import require_heavy_endpoint_rate_limit
 from app.models.source import Source
 from app.schemas.source import (
     SourceCreate,
@@ -74,6 +75,7 @@ async def list_sources(
     status_code=status.HTTP_202_ACCEPTED,
     response_model=SourceSyncResponse,
     response_model_exclude_none=True,
+    dependencies=[Depends(require_heavy_endpoint_rate_limit)],
 )
 async def sync_source(
     source_id: uuid.UUID,

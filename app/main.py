@@ -1,10 +1,15 @@
 from fastapi import FastAPI
-from app.api.v1 import documents, sources, alerts, scores, audit
+
+from app.api.v1 import alerts, audit, documents, scores, sources
+from app.config import settings
 
 app = FastAPI(
     title="Drift Guard",
     description="Documentation validity engine that detects runbook drift",
-    version="0.1.0"
+    version="0.1.0",
+    docs_url="/docs" if settings.public_api_docs_enabled else None,
+    redoc_url="/redoc" if settings.public_api_docs_enabled else None,
+    openapi_url="/openapi.json" if settings.public_api_docs_enabled else None,
 )
 
 app.include_router(documents.router, prefix="/v1/documents", tags=["documents"])

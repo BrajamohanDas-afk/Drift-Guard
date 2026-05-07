@@ -15,6 +15,10 @@ class QueueEnqueueError(RuntimeError):
     pass
 
 
+class QueueCapacityError(QueueEnqueueError):
+    pass
+
+
 async def get_redis_pool() -> ArqRedis:
     redis_settings = redis_settings_from_url(settings.redis_url)
     try:
@@ -22,6 +26,32 @@ async def get_redis_pool() -> ArqRedis:
     except Exception as exc:
         logger.exception("Failed to create Redis pool for worker queue")
         raise QueueEnqueueError("failed to create redis pool") from exc
+
+
+async def _queue_depth(pool: ArqRedis) -> int:
+    if hasattr(pool, "zcard"):
+        return int(await pool.zcard(WORKER_QUEUE_NAME))
+    if hasattr(pool, "llen"):
+        return int(await pool.llen(WORKER_QUEUE_NAME))
+    return 0
+
+
+async def _ensure_queue_capacity(pool: ArqRedis) -> None:
+    max_depth = settings.worker_queue_max_depth
+    if max_depth <= 0:
+        return
+
+    depth = await _queue_depth(pool)
+    if depth >= max_depth:
+        logger.warning(
+            "Worker queue capacity exceeded",
+            extra={
+                "queue_name": WORKER_QUEUE_NAME,
+                "queue_depth": depth,
+                "max_depth": max_depth,
+            },
+        )
+        raise QueueCapacityError("worker queue is at capacity")
 
 
 async def _enqueue_job(
@@ -41,6 +71,7 @@ async def _enqueue_job(
         owned_pool = True
 
     try:
+        await _ensure_queue_capacity(pool)
         return await pool.enqueue_job(
             function_name,
             _job_id=job_id,
@@ -50,6 +81,8 @@ async def _enqueue_job(
             _expires=expires,
             **kwargs,
         )
+    except QueueCapacityError:
+        raise
     except Exception as exc:
         logger.exception(
             "Failed to enqueue worker job",

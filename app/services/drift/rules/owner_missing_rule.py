@@ -1,4 +1,8 @@
-from app.services.drift.rules.base import BaseDriftRule, DriftAlertDraft, DriftRuleContext
+from app.services.drift.rules.base import (
+    BaseDriftRule,
+    DriftAlertDraft,
+    DriftRuleContext,
+)
 
 
 class OwnerMissingRule(BaseDriftRule):

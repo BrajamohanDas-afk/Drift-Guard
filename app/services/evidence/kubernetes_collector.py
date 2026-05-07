@@ -1,10 +1,14 @@
+import re
 from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import quote
 
 import httpx
 from pydantic import BaseModel, Field
 
 from app.config import settings
+
+_DNS1123_LABEL_RE = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 
 
 class KubernetesDeploymentEvidence(BaseModel):
@@ -48,8 +52,10 @@ class KubernetesCollector:
     ) -> KubernetesDeploymentEvidence:
         checked_at = datetime.now(timezone.utc)
         safe_api_url = (self.api_url or "").strip()
+        safe_namespace = namespace.strip()
+        safe_deployment = deployment.strip()
 
-        if not deployment.strip():
+        if not safe_deployment:
             return KubernetesDeploymentEvidence(
                 cluster_api_url=safe_api_url,
                 namespace=namespace,
@@ -59,13 +65,33 @@ class KubernetesCollector:
                 checked_at=checked_at,
             )
 
-        if not namespace.strip():
+        if not safe_namespace:
             return KubernetesDeploymentEvidence(
                 cluster_api_url=safe_api_url,
                 namespace=namespace,
                 deployment=deployment,
                 exists=False,
                 error="namespace must not be empty",
+                checked_at=checked_at,
+            )
+
+        if not _is_dns1123_label(safe_namespace):
+            return KubernetesDeploymentEvidence(
+                cluster_api_url=safe_api_url,
+                namespace=namespace,
+                deployment=deployment,
+                exists=False,
+                error="namespace must be a valid Kubernetes DNS-1123 label",
+                checked_at=checked_at,
+            )
+
+        if not _is_dns1123_subdomain(safe_deployment):
+            return KubernetesDeploymentEvidence(
+                cluster_api_url=safe_api_url,
+                namespace=namespace,
+                deployment=deployment,
+                exists=False,
+                error="deployment must be a valid Kubernetes DNS-1123 name",
                 checked_at=checked_at,
             )
 
@@ -90,8 +116,11 @@ class KubernetesCollector:
             )
 
         base_url = safe_api_url.rstrip("/")
+        encoded_namespace = quote(safe_namespace, safe="")
+        encoded_deployment = quote(safe_deployment, safe="")
         endpoint = (
-            f"{base_url}/apis/apps/v1/namespaces/{namespace}/deployments/{deployment}"
+            f"{base_url}/apis/apps/v1/namespaces/"
+            f"{encoded_namespace}/deployments/{encoded_deployment}"
         )
         headers = {
             "Authorization": f"Bearer {self.bearer_token}",
@@ -102,7 +131,7 @@ class KubernetesCollector:
             async with httpx.AsyncClient(
                 timeout=self.timeout_seconds,
                 verify=self.verify_ssl,
-                follow_redirects=True,
+                follow_redirects=False,
             ) as client:
                 response = await client.get(endpoint, headers=headers)
 
@@ -159,9 +188,20 @@ class KubernetesCollector:
         except httpx.HTTPError as exc:
             return KubernetesDeploymentEvidence(
                 cluster_api_url=safe_api_url,
-                namespace=namespace,
-                deployment=deployment,
+                namespace=safe_namespace,
+                deployment=safe_deployment,
                 exists=False,
                 error=str(exc),
                 checked_at=checked_at,
             )
+
+
+def _is_dns1123_label(value: str) -> bool:
+    return len(value) <= 63 and _DNS1123_LABEL_RE.fullmatch(value) is not None
+
+
+def _is_dns1123_subdomain(value: str) -> bool:
+    return (
+        len(value) <= 253
+        and all(_is_dns1123_label(label) for label in value.split("."))
+    )

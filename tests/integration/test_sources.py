@@ -13,6 +13,7 @@ from app.models.document_version import DocumentVersion
 from app.models.source import Source
 from app.services.ingestion.git_ingestor import GitIngestor
 from app.services.ingestion.source_sync_service import sync_source_by_id
+from app.workers.ingest_task import ingest_task
 from app.workers.queue import QueueEnqueueError
 
 sources_api_module = importlib.import_module("app.api.v1.sources")
@@ -171,6 +172,95 @@ async def test_sync_source_endpoint_enqueues_background_job_and_returns_audit_jo
         assert job is not None
         assert job.status == "pending"
         assert job.triggered_by == f"source_sync:{source_id}"
+
+
+async def test_sync_source_endpoint_payload_runs_through_worker_to_db(monkeypatch):
+    enqueue_calls = []
+    monkeypatch.setattr(settings, "github_token", "token")
+
+    async def fake_enqueue_ingest_task(*, source_id, audit_job_id, job_id):
+        enqueue_calls.append(
+            {
+                "source_id": source_id,
+                "audit_job_id": audit_job_id,
+                "job_id": job_id,
+            }
+        )
+        return object()
+
+    def fake_fetch_markdown_files(self):
+        return [
+            {
+                "filename": "worker-runbook.md",
+                "path": "docs/worker-runbook.md",
+                "content": "# Worker Runbook\n\nOwner: @platform",
+            }
+        ]
+
+    monkeypatch.setattr(
+        sources_api_module,
+        "enqueue_ingest_task",
+        fake_enqueue_ingest_task,
+    )
+    monkeypatch.setattr(
+        GitIngestor,
+        "fetch_markdown_files",
+        fake_fetch_markdown_files,
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        create_source_response = await client.post(
+            "/v1/sources",
+            json={
+                "name": "Worker Runbooks",
+                "type": "git",
+                "config": {"repo_url": "https://github.com/acme/runbooks"},
+            },
+            headers=TEST_HEADERS,
+        )
+        assert create_source_response.status_code == 201
+        source_id = create_source_response.json()["id"]
+
+        sync_response = await client.post(
+            f"/v1/sources/{source_id}/sync",
+            headers=TEST_HEADERS,
+        )
+
+    assert sync_response.status_code == 202
+    assert len(enqueue_calls) == 1
+
+    worker_result = await ingest_task(
+        {},
+        source_id=enqueue_calls[0]["source_id"],
+        audit_job_id=enqueue_calls[0]["audit_job_id"],
+    )
+
+    assert worker_result == {
+        "status": "completed",
+        "source_id": source_id,
+        "audit_job_id": enqueue_calls[0]["audit_job_id"],
+        "documents_seen": 1,
+        "documents_created": 1,
+        "versions_created": 1,
+    }
+
+    async with AsyncSessionLocal() as session:
+        audit_job = await session.get(
+            AuditJob,
+            uuid.UUID(enqueue_calls[0]["audit_job_id"]),
+        )
+        assert audit_job is not None
+        assert audit_job.status == "completed"
+        assert audit_job.docs_scanned == 1
+
+        document_result = await session.execute(select(Document))
+        document = document_result.scalars().one()
+        assert document.source_id == uuid.UUID(source_id)
+        assert document.path == "docs/worker-runbook.md"
+        assert document.latest_version_id is not None
 
 
 async def test_sync_source_endpoint_marks_job_failed_when_enqueue_fails(

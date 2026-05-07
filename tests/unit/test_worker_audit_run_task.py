@@ -58,8 +58,19 @@ async def test_audit_run_task_syncs_sources_and_completes_job(monkeypatch):
         db, *, audit_job_id, docs_scanned_delta=0, alerts_created_delta=0
     ):
         assert db is fake_session
-        assert alerts_created_delta == 0
-        events.append(("progress", audit_job_id, docs_scanned_delta))
+        events.append(
+            ("progress", audit_job_id, docs_scanned_delta, alerts_created_delta)
+        )
+
+    async def fake_scan_all_documents(db):
+        assert db is fake_session
+        events.append(("scan",))
+        return SimpleNamespace(
+            documents_scanned=4,
+            alerts_created=2,
+            alerts_resolved=1,
+            scores_refreshed=4,
+        )
 
     async def fake_mark_completed(db, *, audit_job_id):
         assert db is fake_session
@@ -88,6 +99,11 @@ async def test_audit_run_task_syncs_sources_and_completes_job(monkeypatch):
     )
     monkeypatch.setattr(
         audit_run_task_module,
+        "scan_all_documents",
+        fake_scan_all_documents,
+    )
+    monkeypatch.setattr(
+        audit_run_task_module,
         "mark_audit_job_completed",
         fake_mark_completed,
     )
@@ -100,18 +116,21 @@ async def test_audit_run_task_syncs_sources_and_completes_job(monkeypatch):
     assert events == [
         ("running", audit_job_id),
         ("sync", source_a),
-        ("progress", audit_job_id, 2),
         ("sync", source_b),
-        ("progress", audit_job_id, 3),
+        ("scan",),
+        ("progress", audit_job_id, 4, 2),
         ("completed", audit_job_id),
     ]
     assert result == {
         "status": "completed",
         "audit_job_id": str(audit_job_id),
         "sources_seen": 2,
-        "documents_seen": 5,
+        "documents_seen": 4,
         "documents_created": 2,
         "versions_created": 2,
+        "alerts_created": 2,
+        "alerts_resolved": 1,
+        "scores_refreshed": 4,
     }
 
 
@@ -129,6 +148,22 @@ async def test_audit_run_task_completes_when_no_sources(monkeypatch):
 
     async def fake_mark_completed(_db, *, audit_job_id):
         events.append(("completed", audit_job_id))
+
+    async def fake_increment_progress(
+        _db, *, audit_job_id, docs_scanned_delta=0, alerts_created_delta=0
+    ):
+        events.append(
+            ("progress", audit_job_id, docs_scanned_delta, alerts_created_delta)
+        )
+
+    async def fake_scan_all_documents(_db):
+        events.append(("scan",))
+        return SimpleNamespace(
+            documents_scanned=0,
+            alerts_created=0,
+            alerts_resolved=0,
+            scores_refreshed=0,
+        )
 
     async def fail_sync_source_by_id(*_args, **_kwargs):
         raise AssertionError("sync_source_by_id should not run without sources")
@@ -151,6 +186,16 @@ async def test_audit_run_task_completes_when_no_sources(monkeypatch):
     )
     monkeypatch.setattr(
         audit_run_task_module,
+        "increment_audit_job_progress",
+        fake_increment_progress,
+    )
+    monkeypatch.setattr(
+        audit_run_task_module,
+        "scan_all_documents",
+        fake_scan_all_documents,
+    )
+    monkeypatch.setattr(
+        audit_run_task_module,
         "sync_source_by_id",
         fail_sync_source_by_id,
     )
@@ -160,7 +205,12 @@ async def test_audit_run_task_completes_when_no_sources(monkeypatch):
         audit_job_id=str(audit_job_id),
     )
 
-    assert events == [("running", audit_job_id), ("completed", audit_job_id)]
+    assert events == [
+        ("running", audit_job_id),
+        ("scan",),
+        ("progress", audit_job_id, 0, 0),
+        ("completed", audit_job_id),
+    ]
     assert result["status"] == "completed"
     assert result["sources_seen"] == 0
     assert result["documents_seen"] == 0
@@ -221,6 +271,7 @@ async def test_audit_run_task_noops_when_job_already_completed(monkeypatch):
     completed_job = SimpleNamespace(
         status="completed",
         docs_scanned=7,
+        alerts_created=3,
     )
 
     class CompletedSession:
@@ -257,6 +308,9 @@ async def test_audit_run_task_noops_when_job_already_completed(monkeypatch):
         "documents_seen": 7,
         "documents_created": 0,
         "versions_created": 0,
+        "alerts_created": 3,
+        "alerts_resolved": 0,
+        "scores_refreshed": 0,
         "already_completed": True,
     }
 

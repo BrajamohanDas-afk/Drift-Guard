@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, ClassVar, Literal, Mapping
 
-
 Severity = Literal["low", "medium", "high", "critical"]
 EntityPayload = Mapping[str, Any]
 EvidencePayload = Mapping[str, Any]
@@ -51,7 +50,9 @@ class BaseDriftRule(ABC):
         severity = getattr(cls, "severity", None)
 
         if not isinstance(rule_type, str) or not rule_type.strip():
-            raise TypeError(f"{cls.__name__} must define non-empty class attr: rule_type")
+            raise TypeError(
+                f"{cls.__name__} must define non-empty class attr: rule_type"
+            )
 
         if severity not in cls._VALID_SEVERITIES:
             allowed = ", ".join(sorted(cls._VALID_SEVERITIES))

@@ -120,7 +120,7 @@ async def test_collect_deployment_success(monkeypatch):
 
     assert captured["timeout"] == 4.0
     assert captured["verify"] is False
-    assert captured["follow_redirects"] is True
+    assert captured["follow_redirects"] is False
     assert (
         captured["url"]
         == "https://k8s.example.com/apis/apps/v1/namespaces/prod/deployments/payments-api"
@@ -135,6 +135,46 @@ async def test_collect_deployment_success(monkeypatch):
     assert result.error is None
     assert result.checked_at.tzinfo is not None
     assert result.checked_at.utcoffset() is not None
+
+
+async def test_collect_deployment_rejects_invalid_namespace(monkeypatch):
+    class UnexpectedClient(FakeAsyncClient):
+        def __init__(self, timeout=None, verify=None, follow_redirects=None):
+            raise AssertionError("HTTP client should not be opened")
+
+    monkeypatch.setattr(k8s_module.httpx, "AsyncClient", UnexpectedClient)
+
+    collector = KubernetesCollector(
+        api_url="https://k8s.example.com",
+        bearer_token="token",
+    )
+    result = await collector.collect_deployment(
+        "payments-api",
+        namespace="../default",
+    )
+
+    assert result.exists is False
+    assert result.error == "namespace must be a valid Kubernetes DNS-1123 label"
+
+
+async def test_collect_deployment_rejects_invalid_deployment(monkeypatch):
+    class UnexpectedClient(FakeAsyncClient):
+        def __init__(self, timeout=None, verify=None, follow_redirects=None):
+            raise AssertionError("HTTP client should not be opened")
+
+    monkeypatch.setattr(k8s_module.httpx, "AsyncClient", UnexpectedClient)
+
+    collector = KubernetesCollector(
+        api_url="https://k8s.example.com",
+        bearer_token="token",
+    )
+    result = await collector.collect_deployment(
+        "payments-api/status?watch=true",
+        namespace="prod",
+    )
+
+    assert result.exists is False
+    assert result.error == "deployment must be a valid Kubernetes DNS-1123 name"
 
 
 async def test_collect_deployment_not_found(monkeypatch):

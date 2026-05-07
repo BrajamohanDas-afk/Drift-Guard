@@ -10,6 +10,7 @@ from app.services.drift.rules import (
     OwnerMissingRule,
 )
 from app.services.drift.rules.base import DriftRuleContext
+from app.services.extraction.entity_extractor import EntityExtractor
 
 
 @pytest.fixture(autouse=True)
@@ -224,6 +225,70 @@ def test_dashboard_dead_rule_treats_numeric_string_status_code_as_dead():
     assert alerts[0].evidence["status_code"] == 404
 
 
+def test_dashboard_dead_rule_redacts_sensitive_query_params_in_evidence():
+    dashboard = "https://grafana.example.com/d/payments"
+    target = (
+        "https://grafana.example.com/d/payments?"
+        "token=secret-token&view=summary&X-Amz-Signature=abc123"
+    )
+    rule = DashboardDeadRule()
+    context = DriftRuleContext(
+        document_id=uuid.uuid4(),
+        entities=({"entity_type": "dashboard", "value": dashboard},),
+        evidence={
+            "records": [
+                {
+                    "collector": "http",
+                    "target": target,
+                    "status": "found",
+                    "error": None,
+                    "evidence": {"status_code": 404},
+                }
+            ]
+        },
+    )
+
+    alerts = rule.evaluate(context)
+
+    assert len(alerts) == 1
+    assert alerts[0].evidence["target"] == (
+        "https://grafana.example.com/d/payments?"
+        "token=[REDACTED]&view=summary&X-Amz-Signature=[REDACTED]"
+    )
+    assert "secret-token" not in alerts[0].message
+    assert "abc123" not in str(alerts[0].evidence)
+
+
+def test_dashboard_dead_rule_strips_url_credentials_from_evidence():
+    dashboard = "https://grafana.example.com/d/payments"
+    target = "https://user:pass@grafana.example.com/d/payments?view=summary"
+    rule = DashboardDeadRule()
+    context = DriftRuleContext(
+        document_id=uuid.uuid4(),
+        entities=({"entity_type": "dashboard", "value": dashboard},),
+        evidence={
+            "records": [
+                {
+                    "collector": "http",
+                    "target": target,
+                    "status": "found",
+                    "error": None,
+                    "evidence": {"status_code": 404},
+                }
+            ]
+        },
+    )
+
+    alerts = rule.evaluate(context)
+
+    assert len(alerts) == 1
+    assert alerts[0].evidence["target"] == (
+        "https://grafana.example.com/d/payments?view=summary"
+    )
+    assert "user:pass" not in alerts[0].message
+    assert "user:pass" not in str(alerts[0].evidence)
+
+
 def test_dashboard_dead_rule_ignores_blank_error_string():
     url = "https://grafana.example.com/d/payments"
     rule = DashboardDeadRule()
@@ -316,6 +381,24 @@ def test_dashboard_dead_rule_ignores_falsy_non_string_error_values():
     alerts = rule.evaluate(context)
 
     assert alerts == []
+
+
+def test_dashboard_dead_rule_sanitizes_fallback_dashboard_ref():
+    rule = DashboardDeadRule()
+    ref = "https://grafana.example.com/d/payments?access_token=secret"
+    context = DriftRuleContext(
+        document_id=uuid.uuid4(),
+        entities=({"entity_type": "dashboard", "value": ref},),
+        evidence={"dashboard_http_status": "dead"},
+    )
+
+    alerts = rule.evaluate(context)
+
+    assert len(alerts) == 1
+    assert alerts[0].evidence["dashboard"] == (
+        "https://grafana.example.com/d/payments?access_token=[REDACTED]"
+    )
+    assert "secret" not in alerts[0].message
 
 
 def test_command_deprecated_rule_triggers_with_exact_match():
@@ -583,6 +666,23 @@ def test_dependency_undocumented_rule_triggers_for_observed_undocumented_depende
 
     assert len(alerts) == 1
     assert alerts[0].rule_type == "dependency_undocumented"
+    assert alerts[0].evidence["dependency"] == "redis"
+
+
+def test_dependency_undocumented_rule_uses_extracted_dependency_entities():
+    rule = DependencyUndocumentedRule()
+    entities = tuple(
+        EntityExtractor().extract("Service: payments-api\nDependencies: postgres")
+    )
+    context = DriftRuleContext(
+        document_id=uuid.uuid4(),
+        entities=entities,
+        evidence={"observed_dependencies": ["postgres", "redis"]},
+    )
+
+    alerts = rule.evaluate(context)
+
+    assert len(alerts) == 1
     assert alerts[0].evidence["dependency"] == "redis"
 
 

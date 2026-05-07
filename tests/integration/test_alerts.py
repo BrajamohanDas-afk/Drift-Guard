@@ -354,7 +354,7 @@ async def test_alert_list_order_uses_id_as_tie_breaker_for_equal_created_at():
         assert [alert.id for alert in alerts] == [higher_id, lower_id]
 
 
-async def test_alert_endpoints_support_severity_rule_type_document_and_combined_filters():
+async def test_alert_endpoints_support_filters():
     service = AlertService()
     async with AsyncSessionLocal() as session:
         document_a = Document(title="filters-a.md")
@@ -432,7 +432,8 @@ async def test_alert_endpoints_support_severity_rule_type_document_and_combined_
         document_payload = document_response.json()
         assert document_payload["meta"]["total"] == 2
         assert all(
-            item["document_id"] == str(document_a.id) for item in document_payload["data"]
+            item["document_id"] == str(document_a.id)
+            for item in document_payload["data"]
         )
 
         combined_response = await client.get(

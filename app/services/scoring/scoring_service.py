@@ -35,7 +35,7 @@ class ScoringService:
         self, db: AsyncSession, *, document_id: uuid.UUID
     ) -> ScoreInputs:
         document = await db.get(Document, document_id)
-        if document is None:
+        if document is None or document.is_deleted:
             raise ValueError(f"Document not found: {document_id}")
 
         alerts_result = await db.execute(
@@ -198,7 +198,9 @@ class ScoringService:
     ) -> RunbookScore | None:
         result = await db.execute(
             select(RunbookScore)
+            .join(Document, RunbookScore.document_id == Document.id)
             .where(RunbookScore.document_id == document_id)
+            .where(Document.is_deleted.is_(False))
             .order_by(
                 RunbookScore.scored_at.desc(),
                 RunbookScore.id.desc(),
@@ -215,7 +217,11 @@ class ScoringService:
         result = await db.execute(
             select(RunbookScore)
             .join(latest_subquery, latest_subquery.c.score_id == RunbookScore.id)
-            .where(latest_subquery.c.rank == 1)
+            .join(Document, RunbookScore.document_id == Document.id)
+            .where(
+                latest_subquery.c.rank == 1,
+                Document.is_deleted.is_(False),
+            )
             .order_by(
                 RunbookScore.scored_at.desc(),
                 RunbookScore.id.desc(),
@@ -239,14 +245,23 @@ class ScoringService:
         total_result = await db.execute(
             select(func.count())
             .select_from(latest_subquery)
-            .where(latest_subquery.c.rank == 1)
+            .join(RunbookScore, latest_subquery.c.score_id == RunbookScore.id)
+            .join(Document, RunbookScore.document_id == Document.id)
+            .where(
+                latest_subquery.c.rank == 1,
+                Document.is_deleted.is_(False),
+            )
         )
         total = int(total_result.scalar() or 0)
 
         result = await db.execute(
             select(RunbookScore)
             .join(latest_subquery, latest_subquery.c.score_id == RunbookScore.id)
-            .where(latest_subquery.c.rank == 1)
+            .join(Document, RunbookScore.document_id == Document.id)
+            .where(
+                latest_subquery.c.rank == 1,
+                Document.is_deleted.is_(False),
+            )
             .order_by(
                 RunbookScore.scored_at.desc(),
                 RunbookScore.id.desc(),
