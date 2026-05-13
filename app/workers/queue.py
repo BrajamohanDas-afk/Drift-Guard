@@ -169,6 +169,26 @@ async def enqueue_score_task(
     )
 
 
+async def enqueue_notification_task(
+    *,
+    delivery_id: str,
+    redis: ArqRedis | None = None,
+    job_id: str | None = None,
+    defer_until: datetime.datetime | None = None,
+    defer_by: datetime.timedelta | int | float | None = None,
+    expires: datetime.timedelta | int | float | None = None,
+) -> Job | None:
+    return await _enqueue_job(
+        "notification_task",
+        redis=redis,
+        job_id=job_id or f"notification:{delivery_id}",
+        defer_until=defer_until,
+        defer_by=defer_by,
+        expires=expires,
+        delivery_id=delivery_id,
+    )
+
+
 async def enqueue_nightly_scan(
     *,
     redis: ArqRedis | None = None,

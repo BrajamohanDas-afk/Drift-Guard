@@ -8,6 +8,7 @@ from sqlalchemy import CheckConstraint
 from app.models.alert import Alert
 from app.models.audit_job import AuditJob
 from app.models.entity import Entity
+from app.models.notification_delivery import NotificationDelivery
 from app.models.runbook_score import RunbookScore
 from app.schemas.alert import AlertResponse
 from app.schemas.audit_job import AuditJobResponse
@@ -133,3 +134,22 @@ def test_hot_query_indexes_are_declared_on_models():
     assert "ix_audit_jobs_status_started" in {
         index.name for index in AuditJob.__table__.indexes
     }
+    assert "uq_notification_deliveries_idempotency_key" in {
+        index.name for index in NotificationDelivery.__table__.indexes
+    }
+
+
+def test_notification_delivery_model_has_check_constraints():
+    check_constraints = {
+        constraint.name
+        for constraint in NotificationDelivery.__table__.constraints
+        if isinstance(constraint, CheckConstraint)
+    }
+
+    assert {
+        "ck_notification_deliveries_status",
+        "ck_notification_deliveries_channel",
+        "ck_notification_deliveries_event_type",
+        "ck_notification_deliveries_attempts_range",
+        "ck_notification_deliveries_parent_present",
+    }.issubset(check_constraints)

@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     nightly_scan_cron_enabled: bool = True
     nightly_scan_cron_hour_utc: int = 2
     nightly_scan_cron_minute: int = 0
+    notification_channels: str = ""
+    notification_min_severity: str = "low"
+    notification_timeout_seconds: float = 5.0
+    slack_webhook_url: str | None = None
+    completion_webhook_url: str | None = None
+    email_sink_path: str | None = None
     incidentio_api_token: str | None = None
     incidentio_catalog_type_id: str | None = None
     kubernetes_api_url: str | None = None

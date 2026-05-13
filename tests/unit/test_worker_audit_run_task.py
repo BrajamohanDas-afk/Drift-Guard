@@ -70,11 +70,21 @@ async def test_audit_run_task_syncs_sources_and_completes_job(monkeypatch):
             alerts_created=2,
             alerts_resolved=1,
             scores_refreshed=4,
+            created_alerts=(),
         )
 
     async def fake_mark_completed(db, *, audit_job_id):
         assert db is fake_session
         events.append(("completed", audit_job_id))
+        return SimpleNamespace(id=audit_job_id)
+
+    async def fake_create_and_enqueue_notifications_best_effort(
+        db, *, audit_job, created_alerts, audit_summary
+    ):
+        assert db is fake_session
+        assert audit_job.id == audit_job_id
+        assert created_alerts == ()
+        events.append(("notifications", audit_summary["alerts_created"]))
 
     monkeypatch.setattr(
         audit_run_task_module,
@@ -107,6 +117,11 @@ async def test_audit_run_task_syncs_sources_and_completes_job(monkeypatch):
         "mark_audit_job_completed",
         fake_mark_completed,
     )
+    monkeypatch.setattr(
+        audit_run_task_module,
+        "_create_and_enqueue_notifications_best_effort",
+        fake_create_and_enqueue_notifications_best_effort,
+    )
 
     result = await audit_run_task_module.audit_run_task(
         {},
@@ -120,6 +135,7 @@ async def test_audit_run_task_syncs_sources_and_completes_job(monkeypatch):
         ("scan",),
         ("progress", audit_job_id, 4, 2),
         ("completed", audit_job_id),
+        ("notifications", 2),
     ]
     assert result == {
         "status": "completed",
@@ -148,6 +164,7 @@ async def test_audit_run_task_completes_when_no_sources(monkeypatch):
 
     async def fake_mark_completed(_db, *, audit_job_id):
         events.append(("completed", audit_job_id))
+        return SimpleNamespace(id=audit_job_id)
 
     async def fake_increment_progress(
         _db, *, audit_job_id, docs_scanned_delta=0, alerts_created_delta=0
@@ -163,7 +180,13 @@ async def test_audit_run_task_completes_when_no_sources(monkeypatch):
             alerts_created=0,
             alerts_resolved=0,
             scores_refreshed=0,
+            created_alerts=(),
         )
+
+    async def fake_create_and_enqueue_notifications_best_effort(
+        _db, *, audit_job, created_alerts, audit_summary
+    ):
+        events.append(("notifications", audit_job.id, len(created_alerts)))
 
     async def fail_sync_source_by_id(*_args, **_kwargs):
         raise AssertionError("sync_source_by_id should not run without sources")
@@ -199,6 +222,11 @@ async def test_audit_run_task_completes_when_no_sources(monkeypatch):
         "sync_source_by_id",
         fail_sync_source_by_id,
     )
+    monkeypatch.setattr(
+        audit_run_task_module,
+        "_create_and_enqueue_notifications_best_effort",
+        fake_create_and_enqueue_notifications_best_effort,
+    )
 
     result = await audit_run_task_module.audit_run_task(
         {},
@@ -210,6 +238,7 @@ async def test_audit_run_task_completes_when_no_sources(monkeypatch):
         ("scan",),
         ("progress", audit_job_id, 0, 0),
         ("completed", audit_job_id),
+        ("notifications", audit_job_id, 0),
     ]
     assert result["status"] == "completed"
     assert result["sources_seen"] == 0

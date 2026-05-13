@@ -6,6 +6,7 @@ from arq.connections import RedisSettings
 from app.workers.audit_run_task import audit_run_task
 from app.workers.ingest_task import ingest_task
 from app.workers.nightly_scan import nightly_scan
+from app.workers.notification_task import notification_task
 from app.workers.runtime import (
     WorkerSettings,
     build_cron_jobs,
@@ -63,6 +64,7 @@ def test_worker_settings_registers_phase7_functions():
         audit_run_task,
         ingest_task,
         score_task,
+        notification_task,
         nightly_scan,
     ]
     assert WorkerSettings.queue_name == "drift-guard"

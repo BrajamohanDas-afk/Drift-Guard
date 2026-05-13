@@ -9,6 +9,7 @@ from app.workers.audit_run_task import audit_run_task
 from app.workers.common import WORKER_QUEUE_NAME, redis_settings_from_url
 from app.workers.ingest_task import ingest_task
 from app.workers.nightly_scan import nightly_scan
+from app.workers.notification_task import notification_task
 from app.workers.score_task import score_task
 
 logger = logging.getLogger(__name__)
@@ -80,7 +81,13 @@ async def on_shutdown(ctx: dict[str, Any]) -> None:
 
 
 class WorkerSettings:
-    functions = [audit_run_task, ingest_task, score_task, nightly_scan]
+    functions = [
+        audit_run_task,
+        ingest_task,
+        score_task,
+        notification_task,
+        nightly_scan,
+    ]
     redis_settings = redis_settings_from_url(settings.redis_url)
     queue_name = WORKER_QUEUE_NAME
     timezone = datetime.timezone.utc

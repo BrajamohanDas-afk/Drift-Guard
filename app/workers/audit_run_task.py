@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import AsyncSessionLocal
 from app.models.audit_job import AuditJob
 from app.models.source import Source
+from app.services.alerting.notification_service import NotificationService
 from app.services.audit.audit_job_service import (
     increment_audit_job_progress,
     mark_audit_job_completed,
@@ -16,8 +17,10 @@ from app.services.audit.audit_job_service import (
 )
 from app.services.audit.audit_scan_service import scan_all_documents
 from app.services.ingestion.source_sync_service import sync_source_by_id
+from app.workers.queue import QueueEnqueueError, enqueue_notification_task
 
 logger = logging.getLogger(__name__)
+notification_service = NotificationService()
 
 
 async def _list_source_ids(db: AsyncSession) -> list[uuid.UUID]:
@@ -70,7 +73,23 @@ async def audit_run_task(
                 alerts_created_delta=scan_result.alerts_created,
             )
 
-            await mark_audit_job_completed(session, audit_job_id=audit_job_uuid)
+            completed_job = await mark_audit_job_completed(
+                session, audit_job_id=audit_job_uuid
+            )
+            await _create_and_enqueue_notifications_best_effort(
+                session,
+                audit_job=completed_job,
+                created_alerts=scan_result.created_alerts,
+                audit_summary={
+                    "sources_seen": len(source_ids),
+                    "documents_seen": documents_seen,
+                    "documents_created": documents_created,
+                    "versions_created": versions_created,
+                    "alerts_created": alerts_created,
+                    "alerts_resolved": alerts_resolved,
+                    "scores_refreshed": scores_refreshed,
+                },
+            )
     except Exception:
         logger.exception(
             "audit_run_task failed",
@@ -124,3 +143,41 @@ async def _mark_audit_job_failed_best_effort(
             extra={"audit_job_id": str(audit_job_id)},
             exc_info=True,
         )
+
+
+async def _create_and_enqueue_notifications_best_effort(
+    db: AsyncSession,
+    *,
+    audit_job: AuditJob,
+    created_alerts: tuple,
+    audit_summary: dict[str, Any],
+) -> None:
+    try:
+        deliveries = await notification_service.create_audit_notifications(
+            db,
+            audit_job=audit_job,
+            created_alerts=created_alerts,
+            audit_summary=audit_summary,
+        )
+    except Exception:
+        await db.rollback()
+        logger.warning(
+            "Failed to create notification deliveries after audit run",
+            extra={"audit_job_id": str(audit_job.id)},
+            exc_info=True,
+        )
+        return
+
+    for delivery in deliveries:
+        try:
+            await enqueue_notification_task(delivery_id=str(delivery.id))
+        except QueueEnqueueError:
+            logger.warning(
+                "Failed to enqueue notification delivery",
+                extra={
+                    "audit_job_id": str(audit_job.id),
+                    "delivery_id": str(delivery.id),
+                    "channel": delivery.channel,
+                },
+                exc_info=True,
+            )

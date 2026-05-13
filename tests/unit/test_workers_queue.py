@@ -7,6 +7,7 @@ from app.workers.queue import (
     enqueue_audit_run_task,
     enqueue_ingest_task,
     enqueue_nightly_scan,
+    enqueue_notification_task,
     enqueue_score_task,
     get_redis_pool,
 )
@@ -128,6 +129,32 @@ async def test_enqueue_score_task_with_injected_pool_does_not_close_pool():
     assert fake_redis.enqueue_calls[0][1]["_queue_name"] == WORKER_QUEUE_NAME
     assert fake_redis.enqueue_calls[0][1]["document_id"] == "doc-1"
     assert fake_redis.enqueue_calls[0][1]["audit_job_id"] == "audit-1"
+    assert fake_redis.closed is False
+
+
+@pytest.mark.asyncio
+async def test_enqueue_notification_task_uses_deterministic_job_id():
+    fake_redis = _FakeRedis()
+
+    result = await enqueue_notification_task(
+        delivery_id="delivery-1",
+        redis=fake_redis,
+    )
+
+    assert result is fake_redis.job
+    assert fake_redis.enqueue_calls == [
+        (
+            "notification_task",
+            {
+                "_job_id": "notification:delivery-1",
+                "_queue_name": WORKER_QUEUE_NAME,
+                "_defer_until": None,
+                "_defer_by": None,
+                "_expires": None,
+                "delivery_id": "delivery-1",
+            },
+        )
+    ]
     assert fake_redis.closed is False
 
 

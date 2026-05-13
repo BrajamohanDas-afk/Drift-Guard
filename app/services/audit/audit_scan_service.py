@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.alert import Alert
 from app.models.document import Document
 from app.models.entity import Entity
 from app.services.drift.alert_service import AlertService
@@ -28,6 +29,8 @@ class AuditScanResult:
     alerts_created: int
     alerts_resolved: int
     scores_refreshed: int
+    created_alerts: tuple[Alert, ...] = ()
+    resolved_alerts: tuple[Alert, ...] = ()
 
 
 class AuditScanService:
@@ -56,6 +59,8 @@ class AuditScanService:
         alerts_created = 0
         alerts_resolved = 0
         scores_refreshed = 0
+        created_alerts: list[Alert] = []
+        resolved_alerts: list[Alert] = []
         rule_types = {rule.rule_type for rule in self._rules}
 
         for document in documents:
@@ -75,6 +80,8 @@ class AuditScanService:
             )
             alerts_created += len(persistence_result.created)
             alerts_resolved += len(persistence_result.resolved)
+            created_alerts.extend(persistence_result.created)
+            resolved_alerts.extend(persistence_result.resolved)
 
             await self._scoring_service.score_document(db, document_id=document.id)
             scores_refreshed += 1
@@ -84,6 +91,8 @@ class AuditScanService:
             alerts_created=alerts_created,
             alerts_resolved=alerts_resolved,
             scores_refreshed=scores_refreshed,
+            created_alerts=tuple(created_alerts),
+            resolved_alerts=tuple(resolved_alerts),
         )
 
     async def _list_scannable_documents(self, db: AsyncSession) -> list[Document]:

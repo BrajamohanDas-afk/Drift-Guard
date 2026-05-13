@@ -21,6 +21,7 @@ TRUNCATE TABLE
     documents,
     sources,
     alerts,
+    notification_deliveries,
     runbook_scores,
     audit_jobs
 RESTART IDENTITY CASCADE

@@ -46,6 +46,8 @@ The current repository includes:
 - scoring APIs with deleted-document filtering
 - audit job APIs and audit report summaries
 - ARQ worker tasks for source sync, audit runs, scoring, and nightly scans
+- notification delivery through Slack webhooks, a local email sink, and audit
+  completion webhooks
 - API-key auth for `/v1/*` routes
 - rate limits for heavy endpoints and worker queue capacity guards
 - integration and unit tests
@@ -163,6 +165,12 @@ Important behavior:
 - `SECRET_KEY` and `API_KEY` must be non-placeholder values.
 - `/docs`, `/redoc`, and `/openapi.json` are enabled by default for local
   development. Set `PUBLIC_API_DOCS_ENABLED=false` in production.
+- Notification delivery is disabled until channels are configured. Use
+  `NOTIFICATION_CHANNELS=slack,email`, `SLACK_WEBHOOK_URL`, and
+  `EMAIL_SINK_PATH` for alert notifications. Use `COMPLETION_WEBHOOK_URL` for
+  audit completion callbacks.
+- Notification webhook targets are validated before delivery and redirects are
+  not followed. Delivery records store sanitized targets/payloads only.
 - incident.io and Kubernetes tokens are optional for local development.
 - If `INCIDENTIO_API_TOKEN` is not set, the collector returns a structured
   "not configured" evidence error instead of crashing.
@@ -229,6 +237,7 @@ The app uses Redis and ARQ for asynchronous work:
 - `audit_run_task` syncs sources, runs drift detection, reconciles alerts, and
   refreshes scores.
 - `score_task` refreshes a document score snapshot.
+- `notification_task` sends durable notification delivery records.
 - `nightly_scan` enqueues source sync jobs on a cron schedule when enabled.
 
 The API returns `202` for queued source sync and audit run requests. If Redis is

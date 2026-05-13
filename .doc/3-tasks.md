@@ -5,6 +5,8 @@
 > UPDATED 2026-04-18: Phases 7-9 are now constrained to strict 0 Rs recurring spend (no paid dependencies required to complete these phases).
 >
 > UPDATED 2026-05-02: Tracked audit run/job APIs, source sync background handoff, and audit report endpoints are implemented and verified. Full integration suite passes locally against Docker/Postgres when the Windows-side test process uses `localhost:5433`.
+>
+> UPDATED 2026-05-09: Phase 8 notification delivery is implemented with free-only Slack webhook, local email sink, configurable routing, audit completion webhook support, durable delivery logs, and focused tests.
 
 ---
 
@@ -136,13 +138,13 @@
 
 - Constraint: free-only delivery in this phase (Slack webhook + local/test email sink).
 
-- [ ] T-120 Implement Slack webhook notifier
-- [ ] T-121 Define Slack message payload format
-- [ ] T-122 Implement email notifier with local/test sink mode (no paid provider required)
-- [ ] T-123 Implement configurable alert routing
-- [ ] T-124 Trigger notifier delivery at end of audit
-- [ ] T-125 Add completion webhook support for manual audit runs
-- [ ] T-126 Write notifier tests
+- [x] T-120 Implement Slack webhook notifier
+- [x] T-121 Define Slack message payload format
+- [x] T-122 Implement email notifier with local/test sink mode (no paid provider required)
+- [x] T-123 Implement configurable alert routing
+- [x] T-124 Trigger notifier delivery at end of audit
+- [x] T-125 Add completion webhook support for manual audit runs
+- [x] T-126 Write notifier tests
 
 ---
 
@@ -169,7 +171,7 @@
 - [x] N-011 Move sync to background execution with non-null `audit_job_id` (`T-032`)
 - [x] N-012 Run and finalize integration tests for audit and job flows
 - [x] N-013 Add audit reporting endpoints (`T-109` and `T-110`)
-- [ ] N-014 Implement Phase 8 notification delivery (`T-120` to `T-126`)
+- [x] N-014 Implement Phase 8 notification delivery (`T-120` to `T-126`)
 
 ---
 
@@ -186,9 +188,10 @@ Completed foundation:
 - drift rules engine and alert APIs
 - scoring service and score APIs
 - local/self-hosted worker runtime, tracked audit job APIs, and audit report APIs
+- free-only notification delivery with Slack webhook, local email sink, and audit completion webhook support
 - test coverage for ingestion, alerts, and scoring slices
 
 Current gap between plan and product:
 
-- the project can ingest, extract, report alerts, expose scores, enqueue tracked audit runs, poll audit jobs, and return global/service audit summaries
-- source sync now returns a tracked `audit_job_id`; notification delivery is pending
+- the project can ingest, extract, report alerts, expose scores, enqueue tracked audit runs, poll audit jobs, return global/service audit summaries, and deliver configured notifications
+- Phase 9 hardening/docs work remains broader than this notification slice
