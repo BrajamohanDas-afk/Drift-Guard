@@ -50,6 +50,9 @@ The current repository includes:
   completion webhooks
 - API-key auth for `/v1/*` routes
 - rate limits for heavy endpoints and worker queue capacity guards
+- request logging with `x-request-id` correlation
+- GitHub Actions CI for lint, unit tests, migrations, and integration smoke tests
+- free/local observability and nightly-scan load-test runbooks
 - integration and unit tests
 - Docker Compose for local Postgres and Redis
 
@@ -98,7 +101,7 @@ as `change-me` are rejected at startup.
 ### 1. Start the app and dependencies
 
 ```powershell
-docker compose up -d --build app postgres redis
+docker compose up -d --build app worker postgres redis
 ```
 
 ### 2. Run migrations inside Docker
@@ -147,6 +150,9 @@ If you want to run a focused subset:
 uv run pytest tests/integration/test_documents.py tests/integration/test_sources.py -v
 ```
 
+GitHub Actions runs lint, unit tests, Alembic migration application, and a small
+integration smoke suite on pull requests and pushes to `main`.
+
 ## Configuration Notes
 
 Phase 4 evidence collectors support optional external integrations:
@@ -171,6 +177,8 @@ Important behavior:
   audit completion callbacks.
 - Notification webhook targets are validated before delivery and redirects are
   not followed. Delivery records store sanitized targets/payloads only.
+- HTTP request logs include method, path, status, duration, client, and
+  `x-request-id`; query strings and auth headers are not logged.
 - incident.io and Kubernetes tokens are optional for local development.
 - If `INCIDENTIO_API_TOKEN` is not set, the collector returns a structured
   "not configured" evidence error instead of crashing.
@@ -243,6 +251,19 @@ The app uses Redis and ARQ for asynchronous work:
 The API returns `202` for queued source sync and audit run requests. If Redis is
 unavailable or the queue is over the configured capacity, the API marks the audit
 job failed and returns a service error.
+
+## Operations
+
+Phase 9 hardening uses free/local tooling:
+
+- request logs and worker logs for error monitoring
+- Docker health checks for Postgres and Redis
+- persisted audit job and notification delivery status for failure inspection
+- GitHub Actions for CI
+- `scripts/load_test_nightly_scan.py` for local nightly-scan enqueue load tests
+
+See `.doc/phase-9-observability-runbook.md` and
+`.doc/nightly-scan-load-test.md` for commands.
 
 ## Tech Stack
 

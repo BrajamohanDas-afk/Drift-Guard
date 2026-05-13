@@ -2,7 +2,9 @@
 
 > UPDATED 2026-05-07: Added task completion checkboxes. H-001 through H-006, M-001 through M-015, and L-001 are complete.
 >
-> UPDATED 2026-05-09: Phase 8 notification delivery has started and the free-only Slack/local email/completion webhook slice is implemented.
+> UPDATED 2026-05-09: Phase 8 notification delivery is implemented with the free-only Slack/local email/completion webhook slice.
+>
+> UPDATED 2026-05-13: Phase 9 hardening/docs baseline now includes request logging, existing rate limits/queue guards, CI, contributing docs, free/local observability guidance, and nightly-scan load-test tooling.
 
 ## Scope
 
@@ -40,12 +42,12 @@ Important context:
 
 Phases 0-7 have real implementation behind most checkboxes. The repo is no longer a placeholder.
 
-However, "done" currently means the core audit pipeline, notification slice, and security-quality checklist exist, not that the whole product is production-ready. Remaining product work is mostly CI/observability/load testing and deeper production hardening.
+However, "done" currently means the core audit pipeline, notification slice, security-quality checklist, and local hardening/docs baseline exist, not that the whole product is production-ready. Remaining product work is mostly production deployment policy, deeper scale testing, and future workflows.
 
 Security is partially maintained:
 
 - Good: `/v1/*` routers use API-key auth, API-key comparison uses `hmac.compare_digest`, SQL access is mostly SQLAlchemy expression based, and source responses do not echo source config.
-- Not enough for production: broader CI/observability/load testing work remains open, and notification delivery may still need production channel policy before real external rollout.
+- Not enough for production: deeper scale testing and notification delivery channel policy may still be needed before real external rollout.
 
 ## Phase Status
 
@@ -59,8 +61,8 @@ Security is partially maintained:
 | Phase 5 | Implemented service layer, incomplete scan lifecycle | Rules, alert APIs, and dedupe exist, but no recurring scan reconciliation of stale alerts. |
 | Phase 6 | Implemented with deleted-doc filtering | Scoring works and score APIs now exclude deleted documents. |
 | Phase 7 | Implemented with full audit scan lifecycle | Audit runs sync sources, collect supported evidence, evaluate rules, reconcile alerts, refresh scores, and update job counters. |
-| Phase 8 | Started | Free-only Slack webhook, local email sink, routing, audit completion webhook support, delivery logs, and tests are implemented. |
-| Phase 9 | Partial | API key auth, docs route gating, rate limits, queue guards, and README updates exist; logging, CI, contributing docs, observability, and load testing remain open. |
+| Phase 8 | Implemented | Free-only Slack webhook, local email sink, routing, audit completion webhook support, delivery logs, and tests are implemented. |
+| Phase 9 | Implemented baseline | API key auth, docs route gating, request logging, rate limits, queue guards, README updates, CI, contributing docs, observability guidance, and nightly-scan load-test tooling exist. |
 
 ## Task Completion Tracker
 
@@ -580,7 +582,7 @@ No reviewer found an obvious SQL injection path or auth bypass in the implemente
 
 Security-quality review is complete. Remaining production work is outside this review checklist:
 
-- CI/observability/load testing work remains open.
+- production deployment policy, deeper scale testing, and future product workflows remain open.
 
 Recommended security order:
 
@@ -609,6 +611,6 @@ Phase 7 can now be described as complete end-to-end drift detection for the supp
 
 - [x] `N-014A Wire audit runs to evidence, rules, alert reconciliation, and scoring`
 
-Phase 8 notification delivery has started:
+Phase 8 notification delivery is implemented:
 
 - [x] `N-014 Implement Phase 8 notification delivery`

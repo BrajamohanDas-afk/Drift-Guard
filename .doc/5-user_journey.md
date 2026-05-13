@@ -1,6 +1,8 @@
 # Drift Guard - User Journeys
 
 > UPDATED 2026-05-02: These journeys now include tracked source sync and audit report APIs. Future journeys are called out separately.
+>
+> UPDATED 2026-05-13: Notification delivery is now implemented through Slack webhooks, a local email sink, and audit completion webhooks.
 
 ## Personas
 
@@ -236,11 +238,45 @@ Header: X-API-Key: <api-key>
 
 Jordan can see whether documentation reliability is improving overall and which service runbooks need attention first.
 
+## Journey 7 - Receive Audit Notifications
+
+**Goal:** receive a configured notification after an audit creates alerts or completes.
+
+### Steps
+
+1. Configure notification env values such as:
+
+```env
+NOTIFICATION_CHANNELS=email
+EMAIL_SINK_PATH=/tmp/drift-guard-notifications.jsonl
+```
+
+2. Trigger an audit run.
+
+```http
+POST /v1/audit/run
+Header: X-API-Key: <api-key>
+```
+
+3. Poll the audit job until it completes.
+
+```http
+GET /v1/audit/jobs/{audit_job_id}
+Header: X-API-Key: <api-key>
+```
+
+4. Inspect the local email sink or configured Slack/completion webhook target.
+
+### Outcome
+
+Sam can validate that Drift Guard turns detected drift into durable delivery
+records and configured notifications.
+
 ## Future Journeys - Not Implemented Yet
 
-The following product journeys are still planned only:
+The following product journey is still planned only:
 
-- receiving Slack or email notifications
 - blocking CI on low runbook reliability
 
-These should stay documented as future-state until the corresponding API routes and services are implemented.
+This should stay documented as future-state until the corresponding API routes
+and service behavior are implemented.

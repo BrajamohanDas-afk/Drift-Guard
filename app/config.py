@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     database_url: str
     alembic_database_url: str
     redis_url: str
+    redis_password: str = ""
     secret_key: str = Field(min_length=32)
     github_token: str = ""
     sql_echo: bool = False

@@ -3,6 +3,8 @@
 > UPDATED 2026-04-18: Reconciled against the current repository state and updated with a strict 0 Rs execution policy for Phases 7-9.
 >
 > UPDATED 2026-05-02: Tracked audit run/job APIs, source sync background handoff, and audit report endpoints are implemented on the ARQ worker foundation.
+>
+> UPDATED 2026-05-13: Phase 8 notifications and the Phase 9 hardening/docs baseline are implemented.
 
 ## Vision
 
@@ -34,6 +36,9 @@ The repository is no longer in planning-only state. The current codebase already
 - local/self-hosted ARQ worker runtime with tracked `AuditJob` lifecycle
 - audit job APIs for manual run creation, job listing, and job detail polling
 - audit report APIs for global and service-scoped summaries
+- Slack webhook, local email sink, and audit completion webhook notifications
+- request logging, rate limits, queue capacity guards, GitHub Actions CI, and
+  local observability/load-test runbooks
 - unit tests for extractors and scoring, plus integration tests for health, documents, sources, alerts, and scores
 
 ## What Is Done
@@ -76,10 +81,12 @@ The repository is no longer in planning-only state. The current codebase already
 
 ## What Is Not Done Yet
 
-These planned product areas are still mostly unimplemented:
+The original Phase 0-9 checklist is now implemented at the local MVP level.
+Remaining work is production rollout work, not missing planned foundation:
 
-- Slack/email/webhook notification delivery
-- rate limiting, request logging, CI pipeline, and other hardening work
+- production deployment policy
+- deeper scale/load testing beyond the local nightly-scan helper
+- optional frontend or CI-blocking product workflows
 
 `audit` now supports tracked run/job endpoints plus global and service-scoped report endpoints.
 
@@ -107,9 +114,9 @@ The next meaningful phase is to move from "evaluate and report" to "orchestrate 
 
 Recommended order:
 
-1. Implement Phase 8 notifications using free-only delivery modes.
-2. Implement Phase 9 hardening using open-source/self-hosted paths only.
-3. Keep running the full integration suite against local Docker/Postgres for regression checks.
+1. Keep running lint, unit tests, migration checks, and integration smoke tests through CI.
+2. Use the Phase 9 observability and load-test runbooks before demos or releases.
+3. Decide whether the next product milestone is production deployment, frontend UX, or CI reliability gates.
 
 ## Practical MVP Status
 
@@ -125,20 +132,23 @@ Recommended order:
 - tracked audit run and job polling APIs
 - background source sync handoff with non-null `audit_job_id`
 - global and service-scoped audit report APIs
+- free-only notification delivery
+- request logging, CI, contributor docs, observability notes, and nightly-scan load testing
 - tests for ingestion, alert, and scoring slices
 
-### Current milestone
+### Current Milestone
 
-Alert, scoring, worker runtime, tracked audit job APIs, source sync background handoff, and audit report APIs are implemented.
+The local MVP milestone through Phase 9 is implemented.
 
-## Success Criteria For The Next Milestone
+## Success Criteria For The Current Milestone
 
-The next milestone should only be considered complete when the repository can:
+The Phase 0-9 milestone is complete when the repository can:
 
 - trigger a tracked audit run asynchronously
 - expose audit job lifecycle endpoints with reliable status transitions
 - expose global and service-scoped audit report summaries
 - run nightly scan scheduling from local/self-hosted worker runtime
 - keep notification and hardening features within the 0 Rs constraint
+- run the Phase 9 CI, observability, and load-test checks
 
-The project can now be described as "drift detection, scoring, tracked audit jobs, background source sync, and audit reports implemented; notifications and hardening pending".
+The project can now be described as "drift detection, scoring, tracked audit jobs, background source sync, audit reports, notifications, and the local hardening/docs baseline implemented."

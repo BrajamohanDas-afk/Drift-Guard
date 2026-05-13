@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  DATABASE_URL: postgresql+asyncpg://drift:drift@localhost:5432/driftguard_test
+  ALEMBIC_DATABASE_URL: postgresql+psycopg2://drift:drift@localhost:5432/driftguard_test
+  REDIS_URL: redis://localhost:6379/0
+  REDIS_PASSWORD: ""
+  SECRET_KEY: ci-secret-key-with-more-than-32-characters
+  API_KEY: ci-api-key-with-more-than-16-chars
+  PUBLIC_API_DOCS_ENABLED: "true"
+  NIGHTLY_SCAN_CRON_ENABLED: "false"
+  NOTIFICATION_CHANNELS: email
+  NOTIFICATION_MIN_SEVERITY: low
+  NOTIFICATION_TIMEOUT_SECONDS: "5"
+  EMAIL_SINK_PATH: /tmp/drift-guard-notifications.jsonl
+
+jobs:
+  unit:
+    name: Unit Tests And Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run ruff
+        run: uv run ruff check app tests
+
+      - name: Run unit tests
+        run: uv run pytest tests/unit -q
+
+  integration:
+    name: Integration Smoke Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: drift
+          POSTGRES_PASSWORD: drift
+          POSTGRES_DB: driftguard_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U drift -d driftguard_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run migrations
+        run: uv run alembic upgrade head
+
+      - name: Run integration smoke tests
+        run: uv run pytest tests/integration/test_health.py tests/integration/test_audit.py tests/integration/test_notifications.py -q

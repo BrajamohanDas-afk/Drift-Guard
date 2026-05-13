@@ -7,6 +7,8 @@
 > UPDATED 2026-05-02: Tracked audit run/job APIs, source sync background handoff, and audit report endpoints are implemented and verified. Full integration suite passes locally against Docker/Postgres when the Windows-side test process uses `localhost:5433`.
 >
 > UPDATED 2026-05-09: Phase 8 notification delivery is implemented with free-only Slack webhook, local email sink, configurable routing, audit completion webhook support, durable delivery logs, and focused tests.
+>
+> UPDATED 2026-05-13: Phase 9 hardening/docs baseline is implemented with request logging, existing rate limits, contributing docs, GitHub Actions CI, free/local observability guidance, and a nightly-scan load-test helper.
 
 ---
 
@@ -153,14 +155,14 @@
 - Constraint: free/local/self-hosted implementation only; no paid SaaS or paid CI required.
 
 - [x] T-130 Add API key enforcement for the active document/source endpoints
-- [ ] T-131 Add request logging middleware
-- [ ] T-132 Add rate limiting middleware
+- [x] T-131 Add request logging middleware
+- [x] T-132 Add rate limiting middleware
 - [x] T-133 Keep FastAPI OpenAPI docs enabled at `/docs`
 - [x] T-134 Maintain a current `README.md`
-- [ ] T-135 Add `CONTRIBUTING.md`
-- [ ] T-136 Set up GitHub Actions CI
-- [ ] T-137 Add open-source/self-hosted equivalent error monitoring (no paid SaaS requirement)
-- [ ] T-138 Load test the nightly scan
+- [x] T-135 Add `CONTRIBUTING.md`
+- [x] T-136 Set up GitHub Actions CI
+- [x] T-137 Add open-source/self-hosted equivalent error monitoring (no paid SaaS requirement)
+- [x] T-138 Load test the nightly scan
 
 ---
 
@@ -172,6 +174,7 @@
 - [x] N-012 Run and finalize integration tests for audit and job flows
 - [x] N-013 Add audit reporting endpoints (`T-109` and `T-110`)
 - [x] N-014 Implement Phase 8 notification delivery (`T-120` to `T-126`)
+- [x] N-015 Complete Phase 9 hardening/docs baseline (`T-131` to `T-138`)
 
 ---
 
@@ -189,9 +192,10 @@ Completed foundation:
 - scoring service and score APIs
 - local/self-hosted worker runtime, tracked audit job APIs, and audit report APIs
 - free-only notification delivery with Slack webhook, local email sink, and audit completion webhook support
+- request logging, rate limiting, queue capacity guards, CI, contributor docs, local observability guidance, and nightly-scan load-test tooling
 - test coverage for ingestion, alerts, and scoring slices
 
 Current gap between plan and product:
 
 - the project can ingest, extract, report alerts, expose scores, enqueue tracked audit runs, poll audit jobs, return global/service audit summaries, and deliver configured notifications
-- Phase 9 hardening/docs work remains broader than this notification slice
+- remaining work is now outside the original Phase 0-9 checklist: production deployment policy, deeper scale testing, and any future frontend or CI-gating product features

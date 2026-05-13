@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from app.api.v1 import alerts, audit, documents, scores, sources
 from app.config import settings
+from app.middleware.request_logging import request_logging_middleware
 
 app = FastAPI(
     title="Drift Guard",
@@ -11,6 +12,8 @@ app = FastAPI(
     redoc_url="/redoc" if settings.public_api_docs_enabled else None,
     openapi_url="/openapi.json" if settings.public_api_docs_enabled else None,
 )
+
+app.middleware("http")(request_logging_middleware)
 
 app.include_router(documents.router, prefix="/v1/documents", tags=["documents"])
 app.include_router(sources.router, prefix="/v1/sources", tags=["sources"])

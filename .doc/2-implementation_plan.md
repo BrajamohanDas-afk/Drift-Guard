@@ -3,6 +3,8 @@
 > UPDATED 2026-04-18: Rewritten to match the current codebase and strict 0 Rs execution policy for Phases 7-9.
 >
 > UPDATED 2026-05-02: Audit run/job endpoints, source sync background handoff, and audit report endpoints are implemented on top of the ARQ worker runtime.
+>
+> UPDATED 2026-05-13: Phase 8 notifications and the Phase 9 hardening/docs baseline are implemented.
 
 ## Current Architecture
 
@@ -28,7 +30,7 @@ Drift-Guard/
 |   |   |-- audit/            # audit job lifecycle + report summaries
 |   |   |-- extraction/       # implemented extractors
 |   |   |-- ingestion/        # implemented upload + git ingestion helpers
-|   |   |-- alerting/         # partial/placeholder package
+|   |   |-- alerting/         # implemented notification delivery services
 |   |   |-- drift/            # implemented rules + alert service
 |   |   |-- evidence/         # implemented collectors + store
 |   |   `-- scoring/          # implemented scoring service
@@ -187,12 +189,13 @@ Exit condition:
 
 After the rule pipeline is reliable:
 
-- Slack/email notifier
-- request logging
-- rate limiting
-- CI workflow
-- contributor documentation
-- free-only observability path (open-source/self-hosted)
+- Slack/email notifier (implemented)
+- request logging (implemented)
+- rate limiting (implemented)
+- CI workflow (implemented)
+- contributor documentation (implemented)
+- free-only observability path (implemented)
+- nightly-scan load-test helper (implemented)
 
 ## Current Risks To Respect While Implementing
 
@@ -203,7 +206,9 @@ After the rule pipeline is reliable:
 
 ## Definition Of Done For The Next Iteration
 
-The next code iteration should move into Phase E notification delivery, not redo completed Phase D slices.
+The next code iteration should move beyond the original Phase 0-9 plan.
 
 - notification flow is wired with free-only delivery paths
-- hardening tasks proceed without introducing paid dependencies
+- hardening tasks are implemented without introducing paid dependencies
+- future work should focus on production deployment policy, deeper scale testing,
+  frontend/user experience, or CI reliability gates

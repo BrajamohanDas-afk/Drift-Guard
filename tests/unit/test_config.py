@@ -7,6 +7,7 @@ BASE_SETTINGS = {
     "database_url": "postgresql+asyncpg://drift:drift@postgres:5432/driftguard",
     "alembic_database_url": "postgresql+psycopg2://drift:drift@postgres:5432/driftguard",
     "redis_url": "redis://:local-dev-redis-password@redis:6379/0",
+    "redis_password": "local-dev-redis-password",
     "secret_key": "local-dev-secret-key-replace-before-shared-use",
     "api_key": "dg_local_dev_api_key_replace_before_shared_use",
 }
@@ -22,6 +23,7 @@ def test_settings_accept_local_development_values():
     settings = Settings(_env_file=None, **BASE_SETTINGS)
 
     assert settings.redis_url == "redis://:local-dev-redis-password@redis:6379/0"
+    assert settings.redis_password == "local-dev-redis-password"
     assert settings.github_token == ""
 
 
